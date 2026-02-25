@@ -63,11 +63,6 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
           </Button>
         </div>
 
-        <DialogFooter className="w-full">
-          <Button size="sm" className="w-full text-xs" onClick={onClose}>
-            {t("about.close")}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
