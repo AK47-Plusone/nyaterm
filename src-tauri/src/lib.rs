@@ -410,12 +410,46 @@ fn save_quick_commands(app: tauri::AppHandle, commands: Vec<QuickCommand>) -> Ap
 
 #[tauri::command]
 fn get_app_settings(app: tauri::AppHandle) -> AppResult<config::AppSettings> {
-    config::load_app_settings(&app)
+    let mut settings = config::load_app_settings(&app)?;
+    // Never expose the actual password (ciphertext) to the frontend.
+    // Replace with a sentinel so the frontend knows a password is set.
+    if settings.security.lock_password.is_some() {
+        settings.security.lock_password = Some("__SET__".to_string());
+    }
+    Ok(settings)
 }
 
 #[tauri::command]
-fn save_app_settings(app: tauri::AppHandle, settings: config::AppSettings) -> AppResult<()> {
+fn save_app_settings(app: tauri::AppHandle, mut settings: config::AppSettings) -> AppResult<()> {
+    // Encrypt lock_password if it's new plaintext (not the sentinel from get_app_settings).
+    match settings.security.lock_password.as_deref() {
+        Some("__SET__") => {
+            // Frontend didn't change the password — preserve existing ciphertext.
+            let existing = config::load_app_settings(&app)?;
+            settings.security.lock_password = existing.security.lock_password;
+        }
+        Some("") | None => {
+            // User cleared the password.
+            settings.security.lock_password = None;
+        }
+        Some(plain) => {
+            // New plaintext password — encrypt it.
+            settings.security.lock_password = Some(crypto::encrypt(plain)?);
+        }
+    }
     config::save_app_settings(&app, &settings)
+}
+
+#[tauri::command]
+fn verify_lock_password(app: tauri::AppHandle, password: String) -> AppResult<bool> {
+    let settings = config::load_app_settings(&app)?;
+    match settings.security.lock_password {
+        Some(ref ct) => {
+            let stored = crypto::decrypt(ct)?;
+            Ok(stored == password)
+        }
+        None => Ok(true), // No password set — always pass
+    }
 }
 
 // ── App Entry ───────────────────────────────────────────────────────────────
@@ -518,6 +552,7 @@ pub fn run() {
             save_quick_commands,
             get_app_settings,
             save_app_settings,
+            verify_lock_password,
             watcher::start_file_watch,
             watcher::stop_file_watch,
         ])

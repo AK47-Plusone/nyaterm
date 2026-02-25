@@ -236,12 +236,26 @@ pub fn save_ui_config(app: &AppHandle, config: &UiConfig) -> AppResult<()> {
 
 // ── quick-command.json ─────────────────────────────────────────────────────
 
+fn default_execute() -> String { "execute".to_string() }
+
 /// Single quick command (label + shell command).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuickCommand {
     pub id: String,
     pub label: String,
     pub command: String,
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub color_tag: Option<String>,
+    #[serde(default)]
+    pub icon_tag: Option<String>,
+    #[serde(default)]
+    pub pinned: bool,
+    #[serde(default = "default_execute")]
+    pub execution_mode: String,
 }
 
 /// List of quick commands persisted in quick-command.json.
@@ -402,6 +416,8 @@ pub struct SecuritySettings {
     pub require_master_password: bool,
     #[serde(default)]
     pub idle_lock_minutes: u32,
+    #[serde(default)]
+    pub lock_password: Option<String>,
     #[serde(default = "default_host_key_policy")]
     pub host_key_policy: String,
 }
@@ -414,6 +430,7 @@ impl Default for SecuritySettings {
             use_os_keyring: true,
             require_master_password: false,
             idle_lock_minutes: 0,
+            lock_password: None,
             host_key_policy: default_host_key_policy(),
         }
     }
