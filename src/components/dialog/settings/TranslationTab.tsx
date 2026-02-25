@@ -15,12 +15,12 @@ export function TranslationTab() {
           "settings.translationProviderDesc",
           "Select the API provider for translating terminal output.",
         )}
-        value={appSettings.translation.provider}
+        value={appSettings.translation.provider || "none"}
         onValueChange={(v) =>
-          updateAppSettings({ translation: { ...appSettings.translation, provider: v } })
+          updateAppSettings({ translation: { ...appSettings.translation, provider: v === "none" ? "" : v } })
         }
       >
-        <SelectItem value="">{t("settings.translationDisabled", "Disabled")}</SelectItem>
+        <SelectItem value="none">{t("settings.translationDisabled", "Disabled")}</SelectItem>
         <SelectItem value="openai">OpenAI</SelectItem>
         <SelectItem value="deepl">DeepL</SelectItem>
       </SettingSelect>
