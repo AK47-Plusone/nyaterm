@@ -236,7 +236,9 @@ pub fn save_ui_config(app: &AppHandle, config: &UiConfig) -> AppResult<()> {
 
 // ── quick-command.json ─────────────────────────────────────────────────────
 
-fn default_execute() -> String { "execute".to_string() }
+fn default_execute() -> String {
+    "execute".to_string()
+}
 
 /// Single quick command (label + shell command).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -291,9 +293,15 @@ pub struct GeneralSettings {
 }
 
 fn default_shell() -> String {
-    if cfg!(windows) { "powershell.exe".to_string() } else { "bash".to_string() }
+    if cfg!(windows) {
+        "powershell.exe".to_string()
+    } else {
+        "bash".to_string()
+    }
 }
-fn default_false() -> bool { false }
+fn default_false() -> bool {
+    false
+}
 
 impl Default for GeneralSettings {
     fn default() -> Self {
@@ -324,11 +332,21 @@ pub struct AppearanceSettings {
     pub cursor_blink: bool,
 }
 
-fn default_app_theme() -> String { "github-dark".to_string() }
-fn default_font() -> String { "JetBrains Mono, Fira Code, Consolas, monospace".to_string() }
-fn default_font_size() -> f64 { 14.0 }
-fn default_opacity() -> f64 { 1.0 }
-fn default_cursor_style() -> String { "block".to_string() }
+fn default_app_theme() -> String {
+    "github-dark".to_string()
+}
+fn default_font() -> String {
+    "JetBrains Mono, Fira Code, Consolas, monospace".to_string()
+}
+fn default_font_size() -> f64 {
+    14.0
+}
+fn default_opacity() -> f64 {
+    1.0
+}
+fn default_cursor_style() -> String {
+    "block".to_string()
+}
 
 impl Default for AppearanceSettings {
     fn default() -> Self {
@@ -360,18 +378,14 @@ pub struct ProxySettings {
 pub struct SearchEngine {
     pub name: String,
     pub url_template: String,
+    #[serde(default)]
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchSettings {
-    #[serde(default = "default_search_engine")]
-    pub default_engine: String,
     #[serde(default = "default_custom_engines")]
     pub custom_engines: Vec<SearchEngine>,
-}
-
-fn default_search_engine() -> String {
-    "Google".to_string()
 }
 
 fn default_custom_engines() -> Vec<SearchEngine> {
@@ -379,14 +393,17 @@ fn default_custom_engines() -> Vec<SearchEngine> {
         SearchEngine {
             name: "Google".to_string(),
             url_template: "https://www.google.com/search?q=%s".to_string(),
+            icon: Some("google".to_string()),
         },
         SearchEngine {
             name: "Bing".to_string(),
             url_template: "https://www.bing.com/search?q=%s".to_string(),
+            icon: Some("bing".to_string()),
         },
         SearchEngine {
             name: "DuckDuckGo".to_string(),
             url_template: "https://duckduckgo.com/?q=%s".to_string(),
+            icon: Some("duckduckgo".to_string()),
         },
     ]
 }
@@ -394,7 +411,6 @@ fn default_custom_engines() -> Vec<SearchEngine> {
 impl Default for SearchSettings {
     fn default() -> Self {
         Self {
-            default_engine: default_search_engine(),
             custom_engines: default_custom_engines(),
         }
     }
@@ -422,7 +438,9 @@ pub struct SecuritySettings {
     pub host_key_policy: String,
 }
 
-fn default_host_key_policy() -> String { "prompt".to_string() }
+fn default_host_key_policy() -> String {
+    "prompt".to_string()
+}
 
 impl Default for SecuritySettings {
     fn default() -> Self {
@@ -444,8 +462,12 @@ pub struct TerminalSettings {
     pub keep_alive_interval: u32,
 }
 
-fn default_scrollback() -> u32 { 10000 }
-fn default_keep_alive() -> u32 { 60 }
+fn default_scrollback() -> u32 {
+    10000
+}
+fn default_keep_alive() -> u32 {
+    60
+}
 
 impl Default for TerminalSettings {
     fn default() -> Self {
@@ -468,8 +490,12 @@ pub struct InteractionSettings {
     pub default_encoding: String,
 }
 
-fn default_word_separators() -> String { " ()[]{}\"'".to_string() }
-fn default_encoding() -> String { "UTF-8".to_string() }
+fn default_word_separators() -> String {
+    " ()[]{}\"'".to_string()
+}
+fn default_encoding() -> String {
+    "UTF-8".to_string()
+}
 
 impl Default for InteractionSettings {
     fn default() -> Self {
@@ -511,4 +537,3 @@ pub fn save_app_settings(app: &AppHandle, config: &AppSettings) -> AppResult<()>
     let dir = get_config_dir(app)?;
     save_json(&dir.join("settings.json"), config)
 }
-
