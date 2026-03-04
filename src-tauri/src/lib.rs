@@ -106,10 +106,19 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if let Ok(settings) = crate::config::load_app_settings(window.app_handle()) {
-                    if settings.general.minimize_to_tray {
-                        let _ = window.hide();
-                        api.prevent_close();
+                if window.label() == "main" {
+                    if let Ok(settings) = crate::config::load_app_settings(window.app_handle()) {
+                        if settings.general.minimize_to_tray {
+                            let _ = window.hide();
+                            api.prevent_close();
+                            return;
+                        }
+                    }
+                    // Main window closing: close all child windows
+                    for label in &["settings", "new-session", "quick-command"] {
+                        if let Some(child) = window.app_handle().get_webview_window(label) {
+                            let _ = child.close();
+                        }
                     }
                 }
             }

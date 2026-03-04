@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { NumberInput } from "@/components/ui/number-input";
 import { Textarea } from "@/components/ui/textarea";
 import type { Group, SavedConnection, SshKey } from "../../../types";
-import { useApp } from "@/context/AppContext";
+import { openSettings } from "@/lib/windowManager";
 
 interface NewSessionDialogProps {
   open: boolean;
@@ -37,7 +37,6 @@ export default function NewSessionDialog({
   initialGroupId,
 }: NewSessionDialogProps) {
   const { t } = useTranslation();
-  const { setShowSettingsDialog } = useApp();
   const [name, setName] = useState("");
   const [groupId, setGroupId] = useState("");
   const [newGroupNamePending, setNewGroupNamePending] = useState("");
@@ -536,7 +535,7 @@ export default function NewSessionDialog({
                     onClick={() => {
                       setShowKeyDropdown(false);
                       handleClose();
-                      setShowSettingsDialog(true);
+                      openSettings();
                     }}
                   >
                     <MdSettings className="text-sm" />

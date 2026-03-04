@@ -8,10 +8,8 @@ import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
 import "@fontsource-variable/noto-sans-sc";
 import "./i18n";
-import App from "./App";
 import ErrorBoundary from "./components/ErrorBoundary";
 import "./index.css";
-import { AppProvider } from "./context/AppContext";
 import { applyThemeToDOM, THEME_CACHE_KEY, ThemeProvider } from "./context/ThemeContext";
 import { themes, DEFAULT_THEME_ID } from "./themes";
 
@@ -24,14 +22,39 @@ try {
 
 document.addEventListener("contextmenu", (e) => e.preventDefault());
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <ErrorBoundary>
-      <AppProvider>
-        <ThemeProvider>
-          <App />
-        </ThemeProvider>
-      </AppProvider>
-    </ErrorBoundary>
-  </React.StrictMode>,
-);
+const params = new URLSearchParams(window.location.search);
+const windowType = params.get("window");
+
+if (windowType) {
+  // Child window: lightweight provider stack, no full App
+  const { ChildAppProvider } = await import("./context/ChildAppProvider");
+  const { default: ChildWindowRouter } = await import("./ChildWindowRouter");
+
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <React.StrictMode>
+      <ErrorBoundary>
+        <ChildAppProvider>
+          <ThemeProvider>
+            <ChildWindowRouter windowType={windowType} />
+          </ThemeProvider>
+        </ChildAppProvider>
+      </ErrorBoundary>
+    </React.StrictMode>,
+  );
+} else {
+  // Main window: full app with all providers
+  const { AppProvider } = await import("./context/AppContext");
+  const { default: App } = await import("./App");
+
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <React.StrictMode>
+      <ErrorBoundary>
+        <AppProvider>
+          <ThemeProvider>
+            <App />
+          </ThemeProvider>
+        </AppProvider>
+      </ErrorBoundary>
+    </React.StrictMode>,
+  );
+}

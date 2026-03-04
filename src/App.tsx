@@ -1,11 +1,11 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { listen } from "@tauri-apps/api/event";
 import { MdClose, MdTerminal } from "react-icons/md";
 import { Toaster } from "@/components/ui/sonner";
 import AboutDialog from "./components/dialog/app/AboutDialog";
 import LockScreen from "./components/dialog/app/LockScreen";
-import NewSessionDialog from "./components/dialog/app/NewSessionDialog";
-import SettingsDialog from "./components/dialog/app/SettingsDialog";
+// NewSessionDialog and SettingsDialog are now child windows (opened via windowManager)
 import DraggablePanel from "./components/layout/DraggablePanel";
 import Header from "./components/layout/Header";
 import ResizeHandle from "./components/layout/ResizeHandle";
@@ -21,7 +21,9 @@ import XTerminal from "./components/terminal/XTerminal";
 import { useApp } from "./context/AppContext";
 import { TransferProvider } from "./context/TransferContext";
 import { useIdleLock } from "./hooks/useIdleLock";
-import type { PanelId, PanelLayout, SavedConnection, UiConfig } from "./types";
+import { invoke } from "./lib/invoke";
+import { openNewSession } from "./lib/windowManager";
+import type { AppSettings, PanelId, PanelLayout, SavedConnection, UiConfig } from "./types";
 
 const PANEL_VISIBILITY: Record<PanelId, keyof UiConfig & `show_${string}`> = {
   fileExplorer: "show_file_explorer",
@@ -57,10 +59,7 @@ function App() {
     addTab,
     closeTab,
     updateUi,
-    showNewSession,
-    setShowNewSession,
-    editingConnection,
-    setEditingConnection,
+    updateAppSettings,
     refreshConnections,
     appSettings,
     isLocked,
@@ -89,34 +88,55 @@ function App() {
   const [showAbout, setShowAbout] = useState(false);
 
   // Idle auto-lock
-  useIdleLock(appSettings.security.idle_lock_minutes, () => setIsLocked(true));
+  useIdleLock(
+    appSettings.security.enable_screen_lock ? appSettings.security.idle_lock_minutes : 0,
+    () => setIsLocked(true)
+  );
+
+  // Cross-window event listeners (child windows emit these)
+  useEffect(() => {
+    const unsubs: Promise<() => void>[] = [];
+
+    unsubs.push(
+      listen<AppSettings>("settings-changed", () => {
+        invoke<AppSettings>("get_app_settings").then((cfg) => {
+          updateAppSettings(() => cfg);
+        });
+      }),
+    );
+
+    unsubs.push(
+      listen<{ sessionId: string; name: string; type: "SSH" | "Local" }>(
+        "session-created",
+        (event) => {
+          const { sessionId, name: sessionName, type } = event.payload;
+          addTab(sessionId, sessionName, type);
+        },
+      ),
+    );
+
+    unsubs.push(
+      listen("session-saved", () => {
+        refreshConnections();
+      }),
+    );
+
+    return () => {
+      unsubs.forEach((p) => p.then((unsub) => unsub()));
+    };
+  }, [addTab, refreshConnections, updateAppSettings]);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
 
-  const [initialGroupId, setInitialGroupId] = useState<string | undefined>();
-
-  const handleNewSession = (parentGroupId?: string) => {
-    setEditingConnection(undefined);
-    setInitialGroupId(parentGroupId);
-    setShowNewSession(true);
+  const handleNewSession = (_parentGroupId?: string) => {
+    openNewSession();
   };
 
   const handleEditConnection = useCallback(
     (conn: SavedConnection) => {
-      setEditingConnection(conn);
-      setShowNewSession(true);
+      openNewSession(conn.id);
     },
-    [setEditingConnection, setShowNewSession],
-  );
-
-  // Handle connection success from Dialog or SavedConnections
-  const handleSessionConnected = useCallback(
-    (sessionId: string, name: string, type_: "SSH" | "Local", connectionId?: string) => {
-      addTab(sessionId, name, type_, connectionId);
-      setShowNewSession(false);
-      setEditingConnection(undefined);
-    },
-    [addTab, setShowNewSession, setEditingConnection],
+    [],
   );
 
   const handleSessionClick = useCallback(
@@ -489,27 +509,7 @@ function App() {
         {/* Status Bar */}
         <StatusBar />
 
-        {/* New Session Dialog */}
-        <NewSessionDialog
-          open={showNewSession}
-          onClose={() => {
-            setShowNewSession(false);
-            setEditingConnection(undefined);
-            setInitialGroupId(undefined);
-          }}
-          onConnect={handleSessionConnected}
-          onSaved={() => {
-            setShowNewSession(false);
-            setEditingConnection(undefined);
-            setInitialGroupId(undefined);
-            refreshConnections();
-          }}
-          initialData={editingConnection}
-          initialGroupId={initialGroupId}
-        />
-
         <AboutDialog open={showAbout} onClose={() => setShowAbout(false)} />
-        <SettingsDialog />
 
         <Toaster position="bottom-right" />
 

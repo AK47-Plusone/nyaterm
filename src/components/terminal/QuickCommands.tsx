@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -28,7 +29,7 @@ import {
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { QuickCommand, QuickCommandCategory, QuickCommandsConfig } from "../../types";
-import QuickCommandDialog from "../dialog/terminal/QuickCommandDialog";
+import { openQuickCommand } from "../../lib/windowManager";
 import VariablePromptDialog, {
   parseCommandVariables,
   type VariableDef,
@@ -58,8 +59,6 @@ function QuickCommands({ onSend }: QuickCommandsProps) {
   // UI State
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [editingCmd, setEditingCmd] = useState<QuickCommand | null>(null);
 
   // Variable Prompt State
   const [promptCmd, setPromptCmd] = useState<QuickCommand | null>(null);
@@ -99,21 +98,25 @@ function QuickCommands({ onSend }: QuickCommandsProps) {
     [],
   );
 
-  const handleEditSave = useCallback(
-    (cmd: QuickCommand, newCategory?: QuickCommandCategory) => {
-      setCommands((prev) => {
-        const exists = prev.some((c) => c.id === cmd.id);
-        return exists ? prev.map((c) => (c.id === cmd.id ? cmd : c)) : [...prev, cmd];
-      });
-      if (newCategory) {
-        setSavedCategories((prev) =>
-          prev.find((c) => c.id === newCategory.id) ? prev : [...prev, newCategory],
-        );
-      }
-      setIsEditDialogOpen(false);
-    },
-    [],
-  );
+  // Listen for quick-command-saved events from child window
+  useEffect(() => {
+    const unsub = listen<{ command: QuickCommand; newCategory?: QuickCommandCategory }>(
+      "quick-command-saved",
+      (event) => {
+        const { command: cmd, newCategory } = event.payload;
+        setCommands((prev) => {
+          const exists = prev.some((c) => c.id === cmd.id);
+          return exists ? prev.map((c) => (c.id === cmd.id ? cmd : c)) : [...prev, cmd];
+        });
+        if (newCategory) {
+          setSavedCategories((prev) =>
+            prev.find((c) => c.id === newCategory.id) ? prev : [...prev, newCategory],
+          );
+        }
+      },
+    );
+    return () => { unsub.then((fn) => fn()); };
+  }, []);
 
   const handleCommandClick = useCallback(
     (cmd: QuickCommand) => {
@@ -232,10 +235,7 @@ function QuickCommands({ onSend }: QuickCommandsProps) {
           size="icon-xs"
           className="bg-muted/50 hover:bg-muted text-foreground transition-colors"
           title={t("quickCommands.addCommand") || "Add Quick Command"}
-          onClick={() => {
-            setEditingCmd(null);
-            setIsEditDialogOpen(true);
-          }}
+          onClick={() => openQuickCommand()}
         >
           <MdAdd className="text-[0.875rem]" />
         </Button>
@@ -255,10 +255,7 @@ function QuickCommands({ onSend }: QuickCommandsProps) {
                   variant="outline"
                   size="sm"
                   className="h-7 text-xs bg-muted/20 hover:bg-muted"
-                  onClick={() => {
-                    setEditingCmd(null);
-                    setIsEditDialogOpen(true);
-                  }}
+                  onClick={() => openQuickCommand()}
                 >
                   <MdAdd className="mr-1 text-sm" />
                   {t("quickCommands.addCommand") || "Add Command"}
@@ -366,10 +363,7 @@ function QuickCommands({ onSend }: QuickCommandsProps) {
                     <ContextMenuContent className="min-w-[120px]">
                       <ContextMenuItem
                         className="text-xs gap-2"
-                        onClick={() => {
-                          setEditingCmd(cmd);
-                          setIsEditDialogOpen(true);
-                        }}
+                        onClick={() => openQuickCommand(JSON.stringify(cmd))}
                       >
                         <MdEdit className="text-[0.875rem]" />
                         {t("quickCommands.edit") || "Edit"}
@@ -389,17 +383,6 @@ function QuickCommands({ onSend }: QuickCommandsProps) {
           </div>
         </div>
       </TooltipProvider>
-      {/* Dialogs */}
-      {isEditDialogOpen && (
-        <QuickCommandDialog
-          open={isEditDialogOpen}
-          initialData={editingCmd}
-          savedCategories={allCategories}
-          onClose={() => setIsEditDialogOpen(false)}
-          onSave={handleEditSave}
-        />
-      )}
-
       {promptCmd && (
         <VariablePromptDialog
           open={!!promptCmd}
