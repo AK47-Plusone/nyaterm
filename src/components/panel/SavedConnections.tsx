@@ -556,12 +556,13 @@ export default function SavedConnections({
     const iconDef = conn.icon ? CONNECTION_ICONS[conn.icon] : null;
     const ConnIcon = iconDef ? iconDef.icon : MdLan;
     const iconStyle = iconDef ? { color: iconDef.color } : undefined;
+    const isConnecting = connectingId === conn.id;
     return (
       <ContextMenu key={conn.id}>
         <ContextMenuTrigger asChild>
           <div
             className="relative"
-            draggable
+            draggable={!isConnecting}
             onDragStart={(e) => handleDragStart(e, "connection", conn.id)}
             onDragOver={(e) => handleDragOverItem(e, conn.id, "connection")}
             onDragLeave={(e) => handleDragLeaveItem(e, conn.id, "connection")}
@@ -572,49 +573,57 @@ export default function SavedConnections({
               <div className="absolute top-0 right-2 h-0.5 rounded-full z-10" style={{ backgroundColor: "var(--df-primary)", left: indented ? `${8 + depth * 16 + 16}px` : "0.5rem" }} />
             )}
             <div
-              className={`group/item relative flex items-center gap-2 py-1.5 px-2 rounded cursor-pointer transition-colors df-hover ${isTarget && dragTarget.position === "inside" ? "ring-1 ring-primary/60" : ""}`}
-              style={indented ? { paddingLeft: `${8 + depth * 16 + 16}px` } : undefined}
+              className={`group/item relative flex items-center gap-2 py-1.5 px-2 rounded transition-colors ${isConnecting ? "cursor-wait" : "cursor-pointer df-hover"} ${isTarget && dragTarget.position === "inside" ? "ring-1 ring-primary/60" : ""}`}
+              style={{
+                ...(indented ? { paddingLeft: `${8 + depth * 16 + 16}px` } : undefined),
+                ...(isConnecting ? { backgroundColor: "color-mix(in srgb, var(--df-primary) 12%, transparent)" } : undefined),
+              }}
               onDoubleClick={() => handleConnect(conn)}
             >
-              <ConnIcon className={`text-sm shrink-0${iconDef ? "" : " text-emerald-500/70"}`} style={iconStyle} />
+              <ConnIcon
+                className={`text-sm shrink-0 transition-opacity${iconDef ? "" : " text-emerald-500/70"}${isConnecting ? " opacity-50" : ""}`}
+                style={iconStyle}
+              />
               <span
-                className="flex-1 min-w-0 truncate text-xs font-medium pr-16"
+                className={`flex-1 min-w-0 truncate text-xs font-medium transition-opacity${isConnecting ? " opacity-60 pr-6" : " pr-16"}`}
                 style={{ color: "var(--df-text)" }}
               >
                 {conn.name}
               </span>
-              {connectingId === conn.id && (
-                <MdRefresh className="animate-spin text-xs shrink-0" style={{ color: "var(--df-primary)" }} />
+              {isConnecting && (
+                <MdRefresh className="animate-spin text-base shrink-0" style={{ color: "var(--df-primary)" }} />
               )}
-              <div
-                className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover/item:flex items-center gap-0.5 shrink-0 backdrop-blur-sm rounded px-1"
-                style={{ backgroundColor: "var(--df-bg-hover)" }}
-              >
-                <button
-                  className="p-0.5 cursor-pointer transition-colors hover:opacity-80"
-                  style={{ color: "var(--df-text-dimmed)" }}
-                  title={t("savedConnections.connect")}
-                  onClick={(e) => { e.stopPropagation(); handleConnect(conn); }}
+              {!isConnecting && (
+                <div
+                  className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover/item:flex items-center gap-0.5 shrink-0 backdrop-blur-sm rounded px-1"
+                  style={{ backgroundColor: "var(--df-bg-hover)" }}
                 >
-                  <MdLink className="text-sm cursor-pointer" />
-                </button>
-                <button
-                  className="p-0.5 cursor-pointer transition-colors hover:opacity-80"
-                  style={{ color: "var(--df-text-dimmed)" }}
-                  title={t("savedConnections.edit")}
-                  onClick={(e) => { e.stopPropagation(); onEditConnection(conn); }}
-                >
-                  <MdEdit className="text-sm cursor-pointer" />
-                </button>
-                <button
-                  className="p-0.5 cursor-pointer hover:text-red-400 transition-colors"
-                  style={{ color: "var(--df-text-dimmed)" }}
-                  title={t("savedConnections.delete")}
-                  onClick={(e) => { e.stopPropagation(); setDeleteTarget(conn); }}
-                >
-                  <MdDelete className="text-sm cursor-pointer" />
-                </button>
-              </div>
+                  <button
+                    className="p-0.5 cursor-pointer transition-colors hover:opacity-80"
+                    style={{ color: "var(--df-text-dimmed)" }}
+                    title={t("savedConnections.connect")}
+                    onClick={(e) => { e.stopPropagation(); handleConnect(conn); }}
+                  >
+                    <MdLink className="text-sm cursor-pointer" />
+                  </button>
+                  <button
+                    className="p-0.5 cursor-pointer transition-colors hover:opacity-80"
+                    style={{ color: "var(--df-text-dimmed)" }}
+                    title={t("savedConnections.edit")}
+                    onClick={(e) => { e.stopPropagation(); onEditConnection(conn); }}
+                  >
+                    <MdEdit className="text-sm cursor-pointer" />
+                  </button>
+                  <button
+                    className="p-0.5 cursor-pointer hover:text-red-400 transition-colors"
+                    style={{ color: "var(--df-text-dimmed)" }}
+                    title={t("savedConnections.delete")}
+                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(conn); }}
+                  >
+                    <MdDelete className="text-sm cursor-pointer" />
+                  </button>
+                </div>
+              )}
             </div>
             {showAfter && (
               <div className="absolute bottom-0 right-2 h-0.5 rounded-full z-10" style={{ backgroundColor: "var(--df-primary)", left: indented ? `${8 + depth * 16 + 16}px` : "0.5rem" }} />

@@ -189,6 +189,7 @@
     "user": "用户",
     "auth": "认证",
     "group": "分组",
+    "connecting": "正在连接 {{name}}…",
     "connectionFailed": "连接失败：{{error}}",
     "deleteFailed": "删除连接失败：{{error}}",
     "deleteConfirm": "确定要删除「{{name}}」吗？此操作不可撤销。",

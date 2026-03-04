@@ -189,6 +189,7 @@
     "user": "User",
     "auth": "Auth",
     "group": "Group",
+    "connecting": "Connecting to {{name}}...",
     "connectionFailed": "Connection failed: {{error}}",
     "deleteFailed": "Failed to delete connection: {{error}}",
     "deleteConfirm": "Are you sure you want to delete '{{name}}'? This action cannot be undone.",
