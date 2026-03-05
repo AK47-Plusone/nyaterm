@@ -34,8 +34,12 @@ fn init_tracing(log_dir: std::path::PathBuf) {
     let filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("dragonfly=info,warn"));
 
-    let local_time = fmt::time::OffsetTime::local_rfc_3339()
-        .unwrap_or_else(|_| fmt::time::OffsetTime::new(time::UtcOffset::UTC, time::format_description::well_known::Rfc3339));
+    let local_time = fmt::time::OffsetTime::local_rfc_3339().unwrap_or_else(|_| {
+        fmt::time::OffsetTime::new(
+            time::UtcOffset::UTC,
+            time::format_description::well_known::Rfc3339,
+        )
+    });
 
     tracing_subscriber::registry()
         .with(filter)
@@ -73,10 +77,6 @@ pub fn run() {
 
             let log_dir = app.path().app_log_dir().map_err(|e| e.to_string())?;
             init_tracing(log_dir);
-
-            if let Err(e) = config::migrate_inline_keys(app.handle()) {
-                tracing::warn!("Key migration failed: {e}");
-            }
 
             let config_dir = home_dir.join(".dragonfly");
             let mgr = session_manager.clone();
