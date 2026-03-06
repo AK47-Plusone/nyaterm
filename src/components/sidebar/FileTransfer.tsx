@@ -169,7 +169,7 @@ export default function FileTransfer({ activeSessionId }: FileTransferProps) {
         className="p-2 text-[0.625rem] uppercase tracking-wider font-bold border-b flex justify-between items-center"
         style={{ color: "var(--df-text-muted)", borderColor: "var(--df-border)" }}
       >
-        <span>{t("panel.fileTransfer") || "FILE TRANSFER"}</span>
+        <span>{t("panel.fileTransfer")}</span>
         <div className="flex gap-1">
           {hasCompleted && (
             <MdPlaylistRemove

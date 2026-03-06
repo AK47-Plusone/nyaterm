@@ -72,7 +72,7 @@ export default function TranslationDialog({
     }
   }, [result]);
 
-  const providerLabel = t(`translation.${provider}`, provider);
+  const providerLabel = t(`translation.${provider}`);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>

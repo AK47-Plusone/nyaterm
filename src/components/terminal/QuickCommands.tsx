@@ -200,7 +200,7 @@ function QuickCommands({ onSend }: QuickCommandsProps) {
         <div className="relative shrink-0 flex-1 sm:flex-none">
           <Input
             className="w-full sm:w-32 focus-visible:w-full placeholder:text-xs sm:focus-visible:w-64 bg-transparent h-6 pl-6 pr-2 py-0 border-input transition-all duration-300 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
-            placeholder={t("quickCommands.search") || "Search cmd..."}
+            placeholder={t("quickCommands.search")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -212,11 +212,11 @@ function QuickCommands({ onSend }: QuickCommandsProps) {
         {/* Categories */}
         <Select value={selectedCategory} onValueChange={setSelectedCategory}>
           <SelectTrigger className="h-6 text-[0.6875rem] w-auto border min-w-[100px] max-w-[150px] shadow-none py-0 px-2 rounded bg-transparent focus:ring-0">
-            <SelectValue placeholder={t("quickCommands.allCategories") || "All Categories"} />
+            <SelectValue placeholder={t("quickCommands.allCategories")} />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all" className="text-[0.6875rem]">
-              {t("quickCommands.allCategories") || "All Categories"}
+              {t("quickCommands.allCategories")}
             </SelectItem>
             {allCategories.map((c) => (
               <SelectItem key={c.id} value={c.id} className="text-[0.6875rem]">
@@ -224,7 +224,7 @@ function QuickCommands({ onSend }: QuickCommandsProps) {
               </SelectItem>
             ))}
             <SelectItem value="uncategorized" className="text-[0.6875rem]">
-              {t("quickCommands.uncategorized") || "Uncategorized"}
+              {t("quickCommands.uncategorized")}
             </SelectItem>
           </SelectContent>
         </Select>
@@ -234,7 +234,7 @@ function QuickCommands({ onSend }: QuickCommandsProps) {
           variant="ghost"
           size="icon-xs"
           className="bg-muted/50 hover:bg-muted text-foreground transition-colors"
-          title={t("quickCommands.addCommand") || "Add Quick Command"}
+          title={t("quickCommands.addCommand")}
           onClick={() => openQuickCommand()}
         >
           <MdAdd className="text-[0.875rem]" />
@@ -249,7 +249,7 @@ function QuickCommands({ onSend }: QuickCommandsProps) {
               <div className="flex flex-col items-center justify-center w-full mt-10 p-4 border border-dashed rounded-lg text-muted-foreground opacity-70">
                 <MdTerminal className="text-2xl mb-2" />
                 <span className="text-xs mb-3">
-                  {t("quickCommands.noCommandsFound") || "No commands found"}
+                  {t("quickCommands.noCommandsFound")}
                 </span>
                 <Button
                   variant="outline"
@@ -258,7 +258,7 @@ function QuickCommands({ onSend }: QuickCommandsProps) {
                   onClick={() => openQuickCommand()}
                 >
                   <MdAdd className="mr-1 text-sm" />
-                  {t("quickCommands.addCommand") || "Add Command"}
+                  {t("quickCommands.addCommand")}
                 </Button>
               </div>
             ) : (
@@ -334,8 +334,8 @@ function QuickCommands({ onSend }: QuickCommandsProps) {
                                 <MdBolt className="text-[0.75rem]" />
                               )}
                               {cmd.execution_mode === "append"
-                                ? t("quickCommands.appendOnly") || "Append"
-                                : t("quickCommands.executeImmediately") || "Execute"}
+                                ? t("quickCommands.appendOnly")
+                                : t("quickCommands.executeImmediately")}
                             </div>
                           </div>
 
@@ -366,14 +366,14 @@ function QuickCommands({ onSend }: QuickCommandsProps) {
                         onClick={() => openQuickCommand(JSON.stringify(cmd))}
                       >
                         <MdEdit className="text-[0.875rem]" />
-                        {t("quickCommands.edit") || "Edit"}
+                        {t("quickCommands.edit")}
                       </ContextMenuItem>
                       <ContextMenuItem
                         className="text-xs gap-2 text-destructive focus:text-destructive"
                         onClick={() => handleDelete(cmd.id)}
                       >
                         <MdDelete className="text-[0.875rem]" />
-                        {t("quickCommands.delete") || "Delete"}
+                        {t("quickCommands.delete")}
                       </ContextMenuItem>
                     </ContextMenuContent>
                   </ContextMenu>

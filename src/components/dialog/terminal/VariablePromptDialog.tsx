@@ -70,7 +70,7 @@ export default function VariablePromptDialog({
       <DialogContent aria-describedby={undefined} className="w-[400px] sm:max-w-[400px] p-0 gap-0">
         <DialogHeader className="px-5 py-3 border-b">
           <DialogTitle className="text-sm">
-            {t("quickCommands.fillVariables") || "Fill Command Variables"}
+            {t("quickCommands.fillVariables")}
           </DialogTitle>
         </DialogHeader>
 
@@ -131,7 +131,7 @@ export default function VariablePromptDialog({
             {t("dialog.cancel")}
           </Button>
           <Button size="sm" className="text-xs" onClick={handleSubmit}>
-            {t("quickCommands.run") || "Run Command"}
+            {t("quickCommands.run")}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -62,7 +62,7 @@ export default function QuickCommandPage() {
   useEffect(() => {
     invoke<QuickCommandsConfig>("get_quick_commands")
       .then((cfg) => setSavedCategories(cfg.categories || []))
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const filteredCategories = savedCategories.filter((c) =>
@@ -75,10 +75,10 @@ export default function QuickCommandPage() {
   const handleSave = async () => {
     const newErrors: { label?: string; command?: string } = {};
     if (!label.trim()) {
-      newErrors.label = t("quickCommands.errorLabelRequired") || "Label is required";
+      newErrors.label = t("quickCommands.errorLabelRequired");
     }
     if (!command.trim()) {
-      newErrors.command = t("quickCommands.errorCommandRequired") || "Command script is required";
+      newErrors.command = t("quickCommands.errorCommandRequired");
     }
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -116,8 +116,8 @@ export default function QuickCommandPage() {
       <div className="px-5 py-4 border-b shrink-0" data-tauri-drag-region>
         <h1 className="text-base font-semibold">
           {initialData
-            ? t("quickCommands.editCommand") || "Edit Quick Command"
-            : t("quickCommands.addCommand") || "Add Quick Command"}
+            ? t("quickCommands.editCommand")
+            : t("quickCommands.addCommand")}
         </h1>
       </div>
 
@@ -126,14 +126,14 @@ export default function QuickCommandPage() {
           <div className="flex-1 space-y-1.5">
             <div className="flex justify-between items-center">
               <Label htmlFor="qc-label" className="text-xs text-muted-foreground">
-                {t("quickCommands.labelName") || "Label"}
+                {t("quickCommands.labelName")}
               </Label>
               {errors.label && <span className="text-[0.6875rem] text-destructive">{errors.label}</span>}
             </div>
             <Input
               id="qc-label"
               className={`text-sm h-9 ${errors.label ? "border-destructive focus-visible:ring-destructive" : ""}`}
-              placeholder={t("quickCommands.labelPlaceholder") || "e.g. List files"}
+              placeholder={t("quickCommands.labelPlaceholder")}
               value={label}
               onChange={(e) => {
                 setLabel(e.target.value);
@@ -144,7 +144,7 @@ export default function QuickCommandPage() {
 
           <div className="flex-1 space-y-1.5">
             <Label htmlFor="qc-category" className="text-xs text-muted-foreground">
-              {t("quickCommands.category") || "Category"}
+              {t("quickCommands.category")}
             </Label>
             <Popover open={showCategoryDropdown} onOpenChange={(open) => {
               setShowCategoryDropdown(open);
@@ -160,7 +160,7 @@ export default function QuickCommandPage() {
                     {categoryId === "new"
                       ? categorySearchQuery.trim()
                       : categoryId === "none"
-                        ? (t("quickCommands.uncategorized") || "None")
+                        ? t("quickCommands.uncategorized")
                         : savedCategories.find((c) => c.id === categoryId)?.name || categoryId}
                   </span>
                 </Button>
@@ -175,7 +175,7 @@ export default function QuickCommandPage() {
                   <Input
                     autoFocus
                     className="h-8 text-sm bg-transparent border-none focus-visible:ring-0 shadow-none px-2"
-                    placeholder={t("quickCommands.searchOrCreateCategory") || "Search or create category..."}
+                    placeholder={t("quickCommands.searchOrCreateCategory")}
                     value={categorySearchQuery}
                     onChange={(e) => setCategorySearchQuery(e.target.value)}
                     onKeyDown={(e) => {
@@ -197,7 +197,7 @@ export default function QuickCommandPage() {
                         setCategorySearchQuery("");
                       }}
                     >
-                      {t("quickCommands.uncategorized") || "None (Uncategorized)"}
+                      {t("quickCommands.uncategorized")}
                     </div>
                   )}
                   {filteredCategories.map((c) => (
@@ -221,7 +221,7 @@ export default function QuickCommandPage() {
                         setShowCategoryDropdown(false);
                       }}
                     >
-                      {t("quickCommands.createCategory", { name: categorySearchQuery.trim() }) || `Create "${categorySearchQuery.trim()}"`}
+                      {t("quickCommands.createCategory", { name: categorySearchQuery.trim() })}
                     </div>
                   )}
                 </div>
@@ -233,12 +233,12 @@ export default function QuickCommandPage() {
         {/* Description */}
         <div className="space-y-1.5">
           <Label htmlFor="qc-desc" className="text-xs text-muted-foreground">
-            {t("quickCommands.description") || "Description (optional)"}
+            {t("quickCommands.description")}
           </Label>
           <Input
             id="qc-desc"
             className="text-sm h-9"
-            placeholder={t("quickCommands.descriptionPlaceholder") || "Details about this command"}
+            placeholder={t("quickCommands.descriptionPlaceholder")}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
@@ -248,7 +248,7 @@ export default function QuickCommandPage() {
         <div className="flex flex-col sm:flex-row gap-4 sm:items-end">
           <div className="flex-1 space-y-2">
             <Label className="text-xs text-muted-foreground">
-              {t("quickCommands.colorTag") || "Color Tag"}
+              {t("quickCommands.colorTag")}
             </Label>
             <div className="flex gap-2 h-9 items-center">
               {THEME_COLORS.map((color) => (
@@ -300,7 +300,7 @@ export default function QuickCommandPage() {
           <div className="flex-1 flex items-center sm:justify-end gap-2 h-9">
             <Switch checked={pinned} onCheckedChange={setPinned} id="qc-pinned" />
             <Label htmlFor="qc-pinned" className="text-sm cursor-pointer select-none">
-              {t("quickCommands.pin") || "Pin to top"}
+              {t("quickCommands.pin")}
             </Label>
           </div>
         </div>
@@ -308,7 +308,7 @@ export default function QuickCommandPage() {
         {/* Execution Mode */}
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">
-            {t("quickCommands.executionMode") || "Execution Mode"}
+            {t("quickCommands.executionMode")}
           </Label>
           <div className="flex p-1 gap-1 bg-muted/40 rounded-md border items-center">
             <Button
@@ -318,7 +318,7 @@ export default function QuickCommandPage() {
               className={`flex-1 text-sm h-8 ${executionMode === "execute" ? "shadow-sm" : ""}`}
               onClick={() => setExecutionMode("execute")}
             >
-              {t("quickCommands.executeImmediately") || "Execute immediately"}
+              {t("quickCommands.executeImmediately")}
             </Button>
             <Button
               type="button"
@@ -327,13 +327,13 @@ export default function QuickCommandPage() {
               className={`flex-1 text-sm h-8 ${executionMode === "append" ? "shadow-sm" : ""}`}
               onClick={() => setExecutionMode("append")}
             >
-              {t("quickCommands.appendOnly") || "Append to prompt"}
+              {t("quickCommands.appendOnly")}
             </Button>
           </div>
           <p className="text-[0.6875rem] text-muted-foreground pl-1">
             {executionMode === "execute"
-              ? t("quickCommands.executeHint") || "Command will be executed automatically when clicked."
-              : t("quickCommands.appendHint") || "Command will be placed at the prompt for review before executing."}
+              ? t("quickCommands.executeHint")
+              : t("quickCommands.appendHint")}
           </p>
         </div>
 
@@ -341,7 +341,7 @@ export default function QuickCommandPage() {
         <div className="space-y-1.5">
           <div className="flex justify-between items-center">
             <Label htmlFor="qc-command" className="text-xs text-muted-foreground">
-              {t("quickCommands.commandScript") || "Command Script"}
+              {t("quickCommands.commandScript")}
             </Label>
             {errors.command && <span className="text-[0.6875rem] text-destructive">{errors.command}</span>}
           </div>
@@ -349,10 +349,7 @@ export default function QuickCommandPage() {
             id="qc-command"
             className={`font-mono text-sm resize-none h-28 bg-muted/30 ${errors.command ? "border-destructive focus-visible:ring-destructive" : ""}`}
             style={{ fieldSizing: "fixed" } as any}
-            placeholder={
-              t("quickCommands.commandPlaceholder") ||
-              "e.g. ls -la\nUse {{varName}} for variables."
-            }
+            placeholder={t("quickCommands.commandPlaceholder")}
             value={command}
             onChange={(e) => {
               setCommand(e.target.value);
