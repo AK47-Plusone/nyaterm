@@ -56,15 +56,12 @@ pub struct FileProperties {
 }
 
 /// Opens an SFTP session by reusing the existing SSH connection's handle.
-async fn open_sftp(
-    manager: &SessionManager,
-    session_id: &str,
-) -> AppResult<SftpSession> {
+async fn open_sftp(manager: &SessionManager, session_id: &str) -> AppResult<SftpSession> {
     let handle = {
         let sessions = manager.sessions.lock().await;
-        let session = sessions
-            .get(session_id)
-            .ok_or_else(|| AppError::SessionNotFound(format!("Session '{}' not found", session_id)))?;
+        let session = sessions.get(session_id).ok_or_else(|| {
+            AppError::SessionNotFound(format!("Session '{}' not found", session_id))
+        })?;
 
         session
             .ssh_handle
@@ -129,10 +126,7 @@ fn permissions_to_string(mode: u32, type_char: char) -> String {
 }
 
 /// Resolves `$HOME` on the remote host via SFTP `canonicalize(".")`.
-pub async fn get_home_dir(
-    manager: Arc<SessionManager>,
-    session_id: &str,
-) -> AppResult<String> {
+pub async fn get_home_dir(manager: Arc<SessionManager>, session_id: &str) -> AppResult<String> {
     let sftp = open_sftp(&manager, session_id).await?;
     let home = sftp.canonicalize(".").await?;
     let _ = sftp.close().await;
@@ -168,7 +162,13 @@ pub async fn list_remote_dir(
         let file_type = entry.file_type();
         let is_dir = file_type == FileType::Dir;
         let is_symlink = file_type == FileType::Symlink;
-        let type_char = if is_dir { 'd' } else if is_symlink { 'l' } else { '-' };
+        let type_char = if is_dir {
+            'd'
+        } else if is_symlink {
+            'l'
+        } else {
+            '-'
+        };
 
         let attrs = entry.metadata();
         let size = attrs.size.unwrap_or(0);
@@ -197,7 +197,9 @@ pub async fn delete_remote_file(
     let meta = sftp.metadata(path).await?;
     // Use the full POSIX type mask (S_IFMT = 0o170000) so that symlinks and other
     // special files are never mistakenly treated as directories.
-    let is_dir = meta.permissions.map_or(false, |p| (p & 0o170000) == 0o040000);
+    let is_dir = meta
+        .permissions
+        .map_or(false, |p| (p & 0o170000) == 0o040000);
 
     if is_dir {
         remove_dir_recursive(&sftp, path).await?;
@@ -280,22 +282,27 @@ pub async fn download_remote_file(
     use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
     use tokio::task::JoinSet;
 
-    let file_name = remote_path.split('/').last().unwrap_or(remote_path).to_string();
+    let file_name = remote_path
+        .split('/')
+        .last()
+        .unwrap_or(remote_path)
+        .to_string();
     let transfer_id = uuid::Uuid::new_v4().to_string();
 
-    let make_event = |status: &str, bytes_transferred: u64, total_size: u64, error_msg: Option<String>| {
-        TransferEvent {
-            id: transfer_id.clone(),
-            session_id: session_id.to_string(),
-            file_name: file_name.clone(),
-            direction: "download".to_string(),
-            status: status.to_string(),
-            size: total_size,
-            bytes_transferred,
-            total_size,
-            error_msg,
-        }
-    };
+    let make_event =
+        |status: &str, bytes_transferred: u64, total_size: u64, error_msg: Option<String>| {
+            TransferEvent {
+                id: transfer_id.clone(),
+                session_id: session_id.to_string(),
+                file_name: file_name.clone(),
+                direction: "download".to_string(),
+                status: status.to_string(),
+                size: total_size,
+                bytes_transferred,
+                total_size,
+                error_msg,
+            }
+        };
 
     let _ = app.emit("transfer-event", &make_event("started", 0, 0, None));
 
@@ -310,7 +317,9 @@ pub async fn download_remote_file(
 
         let sftp = open_sftp(&manager, session_id).await?;
 
-        let total_size = sftp.metadata(remote_path).await
+        let total_size = sftp
+            .metadata(remote_path)
+            .await
             .map(|m| m.size.unwrap_or(0))
             .unwrap_or(0);
 
@@ -372,10 +381,12 @@ pub async fn download_remote_file(
                     // seek(SeekFrom::Start) is a pure local offset update — no
                     // network round trip. The offset is sent as part of the next
                     // SSH_FXP_READ request.
-                    f.seek(SeekFrom::Start(offset)).await
+                    f.seek(SeekFrom::Start(offset))
+                        .await
                         .map_err(|e| AppError::Channel(format!("Seek failed: {}", e)))?;
                     let mut buf = vec![0u8; len];
-                    f.read_exact(&mut buf).await
+                    f.read_exact(&mut buf)
+                        .await
                         .map_err(|e| AppError::Channel(format!("SFTP read failed: {}", e)))?;
                     Ok((offset, buf, f))
                 });
@@ -383,14 +394,18 @@ pub async fn download_remote_file(
 
             // Drain results and keep the pipeline full
             while let Some(res) = join_set.join_next().await {
-                let (chunk_offset, data, fh) = res
-                    .map_err(|e| AppError::Channel(format!("Task panicked: {}", e)))??;
+                let (chunk_offset, data, fh) =
+                    res.map_err(|e| AppError::Channel(format!("Task panicked: {}", e)))??;
 
                 // All writes are sequential in this loop; seek + write on a
                 // single local handle is safe and needs no mutex.
-                local_file.seek(SeekFrom::Start(chunk_offset)).await
+                local_file
+                    .seek(SeekFrom::Start(chunk_offset))
+                    .await
                     .map_err(|e| AppError::Channel(format!("Local seek failed: {}", e)))?;
-                local_file.write_all(&data).await
+                local_file
+                    .write_all(&data)
+                    .await
                     .map_err(|e| AppError::Channel(format!("Local write failed: {}", e)))?;
 
                 bytes_transferred += data.len() as u64;
@@ -411,10 +426,12 @@ pub async fn download_remote_file(
 
                     join_set.spawn(async move {
                         let mut f = fh;
-                        f.seek(SeekFrom::Start(offset)).await
+                        f.seek(SeekFrom::Start(offset))
+                            .await
                             .map_err(|e| AppError::Channel(format!("Seek failed: {}", e)))?;
                         let mut buf = vec![0u8; len];
-                        f.read_exact(&mut buf).await
+                        f.read_exact(&mut buf)
+                            .await
                             .map_err(|e| AppError::Channel(format!("SFTP read failed: {}", e)))?;
                         Ok((offset, buf, f))
                     });
@@ -425,18 +442,24 @@ pub async fn download_remote_file(
             // ── Sequential fallback (file size unknown) ─────────────────────
             // Used when the server does not report a size in metadata (e.g.
             // virtual/proc files). Pipelining requires knowing offsets upfront.
-            let mut remote_file = sftp.open(remote_path).await
+            let mut remote_file = sftp
+                .open(remote_path)
+                .await
                 .map_err(|e| AppError::Channel(format!("Failed to open remote file: {}", e)))?;
 
             const SEQ_CHUNK: usize = 512 * 1024;
             let mut buf = vec![0u8; SEQ_CHUNK];
             loop {
-                let n = remote_file.read(&mut buf).await
+                let n = remote_file
+                    .read(&mut buf)
+                    .await
                     .map_err(|e| AppError::Channel(format!("SFTP read failed: {}", e)))?;
                 if n == 0 {
                     break;
                 }
-                local_file.write_all(&buf[..n]).await
+                local_file
+                    .write_all(&buf[..n])
+                    .await
                     .map_err(|e| AppError::Channel(format!("Write failed: {}", e)))?;
                 bytes_transferred += n as u64;
 
@@ -450,13 +473,16 @@ pub async fn download_remote_file(
             }
         }
 
-        local_file.flush().await
+        local_file
+            .flush()
+            .await
             .map_err(|e| AppError::Channel(format!("Flush failed: {}", e)))?;
 
         let _ = sftp.close().await;
 
         Ok(bytes_transferred)
-    }.await;
+    }
+    .await;
 
     match result {
         Ok(size) => {
@@ -464,7 +490,10 @@ pub async fn download_remote_file(
             Ok(())
         }
         Err(e) => {
-            let _ = app.emit("transfer-event", &make_event("error", 0, 0, Some(e.to_string())));
+            let _ = app.emit(
+                "transfer-event",
+                &make_event("error", 0, 0, Some(e.to_string())),
+            );
             Err(e)
         }
     }
@@ -480,22 +509,27 @@ pub async fn upload_local_file(
     use std::time::{Duration, Instant};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    let file_name = remote_path.split('/').last().unwrap_or(remote_path).to_string();
+    let file_name = remote_path
+        .split('/')
+        .last()
+        .unwrap_or(remote_path)
+        .to_string();
     let transfer_id = uuid::Uuid::new_v4().to_string();
 
-    let make_event = |status: &str, bytes_transferred: u64, total_size: u64, error_msg: Option<String>| {
-        TransferEvent {
-            id: transfer_id.clone(),
-            session_id: session_id.to_string(),
-            file_name: file_name.clone(),
-            direction: "upload".to_string(),
-            status: status.to_string(),
-            size: total_size,
-            bytes_transferred,
-            total_size,
-            error_msg,
-        }
-    };
+    let make_event =
+        |status: &str, bytes_transferred: u64, total_size: u64, error_msg: Option<String>| {
+            TransferEvent {
+                id: transfer_id.clone(),
+                session_id: session_id.to_string(),
+                file_name: file_name.clone(),
+                direction: "upload".to_string(),
+                status: status.to_string(),
+                size: total_size,
+                bytes_transferred,
+                total_size,
+                error_msg,
+            }
+        };
 
     let _ = app.emit("transfer-event", &make_event("started", 0, 0, None));
 
@@ -523,28 +557,38 @@ pub async fn upload_local_file(
         let mut last_progress = Instant::now();
 
         loop {
-            let n = local_file.read(&mut buf).await
+            let n = local_file
+                .read(&mut buf)
+                .await
                 .map_err(|e| AppError::Channel(format!("Failed to read local file: {}", e)))?;
             if n == 0 {
                 break;
             }
-            remote_file.write_all(&buf[..n]).await
+            remote_file
+                .write_all(&buf[..n])
+                .await
                 .map_err(|e| AppError::Channel(format!("SFTP write failed: {}", e)))?;
             bytes_transferred += n as u64;
 
             if last_progress.elapsed() >= PROGRESS_INTERVAL {
                 last_progress = Instant::now();
-                let _ = app.emit("transfer-event", &make_event("progress", bytes_transferred, total_size, None));
+                let _ = app.emit(
+                    "transfer-event",
+                    &make_event("progress", bytes_transferred, total_size, None),
+                );
             }
         }
 
-        remote_file.shutdown().await
+        remote_file
+            .shutdown()
+            .await
             .map_err(|e| AppError::Channel(format!("SFTP flush failed: {}", e)))?;
 
         let _ = sftp.close().await;
 
         Ok(bytes_transferred)
-    }.await;
+    }
+    .await;
 
     match result {
         Ok(size) => {
@@ -552,13 +596,65 @@ pub async fn upload_local_file(
             Ok(())
         }
         Err(e) => {
-            let _ = app.emit("transfer-event", &make_event("error", 0, 0, Some(e.to_string())));
+            let _ = app.emit(
+                "transfer-event",
+                &make_event("error", 0, 0, Some(e.to_string())),
+            );
             Err(e)
         }
     }
 }
 
+pub async fn create_remote_file(
+    manager: Arc<SessionManager>,
+    session_id: &str,
+    path: &str,
+    mode: Option<String>,
+) -> AppResult<()> {
+    let sftp = open_sftp(&manager, session_id).await?;
+    let file = sftp.create(path).await?;
+    drop(file);
+    if let Some(m) = mode {
+        let mode_u32 = u32::from_str_radix(&m, 8)
+            .map_err(|_| AppError::Channel(format!("Invalid octal mode: {}", m)))?;
+        let mut attrs = sftp.metadata(path).await?;
+        attrs.permissions = Some(mode_u32);
+        sftp.set_metadata(path, attrs).await?;
+    }
+    let _ = sftp.close().await;
+    Ok(())
+}
 
+pub async fn create_remote_dir(
+    manager: Arc<SessionManager>,
+    session_id: &str,
+    path: &str,
+    mode: Option<String>,
+) -> AppResult<()> {
+    let sftp = open_sftp(&manager, session_id).await?;
+    sftp.create_dir(path).await?;
+    if let Some(m) = mode {
+        let mode_u32 = u32::from_str_radix(&m, 8)
+            .map_err(|_| AppError::Channel(format!("Invalid octal mode: {}", m)))?;
+        let mut attrs = sftp.metadata(path).await?;
+        attrs.permissions = Some(mode_u32);
+        sftp.set_metadata(path, attrs).await?;
+    }
+    let _ = sftp.close().await;
+    Ok(())
+}
+
+pub async fn create_remote_symlink(
+    manager: Arc<SessionManager>,
+    session_id: &str,
+    link_path: &str,
+    target_path: &str,
+) -> AppResult<()> {
+    let sftp = open_sftp(&manager, session_id).await?;
+    sftp.symlink(link_path, target_path).await?;
+    let _ = sftp.close().await;
+    Ok(())
+}
 
 pub async fn chmod_remote_file(
     manager: Arc<SessionManager>,
@@ -593,7 +689,13 @@ pub async fn get_file_properties(
     let type_bits = perms & 0o170000;
     let is_dir = type_bits == 0o040000;
     let is_symlink = type_bits == 0o120000;
-    let type_char = if is_dir { 'd' } else if is_symlink { 'l' } else { '-' };
+    let type_char = if is_dir {
+        'd'
+    } else if is_symlink {
+        'l'
+    } else {
+        '-'
+    };
     let permissions = permissions_to_string(perms, type_char);
     let name = path.split('/').last().unwrap_or(path).to_string();
 

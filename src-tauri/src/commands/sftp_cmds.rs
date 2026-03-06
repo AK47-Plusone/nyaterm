@@ -36,13 +36,7 @@ pub async fn rename_remote_file(
     old_path: String,
     new_path: String,
 ) -> AppResult<()> {
-    sftp::rename_remote_file(
-        state.inner().clone(),
-        &session_id,
-        &old_path,
-        &new_path,
-    )
-    .await
+    sftp::rename_remote_file(state.inner().clone(), &session_id, &old_path, &new_path).await
 }
 
 #[tauri::command]
@@ -88,6 +82,36 @@ pub async fn get_file_properties(
     path: String,
 ) -> AppResult<sftp::FileProperties> {
     sftp::get_file_properties(state.inner().clone(), &session_id, &path).await
+}
+
+#[tauri::command]
+pub async fn create_remote_file(
+    state: tauri::State<'_, Arc<SessionManager>>,
+    session_id: String,
+    path: String,
+    mode: Option<String>,
+) -> AppResult<()> {
+    sftp::create_remote_file(state.inner().clone(), &session_id, &path, mode).await
+}
+
+#[tauri::command]
+pub async fn create_remote_dir(
+    state: tauri::State<'_, Arc<SessionManager>>,
+    session_id: String,
+    path: String,
+    mode: Option<String>,
+) -> AppResult<()> {
+    sftp::create_remote_dir(state.inner().clone(), &session_id, &path, mode).await
+}
+
+#[tauri::command]
+pub async fn create_remote_symlink(
+    state: tauri::State<'_, Arc<SessionManager>>,
+    session_id: String,
+    link_path: String,
+    target_path: String,
+) -> AppResult<()> {
+    sftp::create_remote_symlink(state.inner().clone(), &session_id, &link_path, &target_path).await
 }
 
 #[tauri::command]

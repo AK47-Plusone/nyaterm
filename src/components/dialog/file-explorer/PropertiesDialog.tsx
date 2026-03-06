@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { MdFolder, MdInsertDriveFile, MdRefresh } from "react-icons/md";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -310,36 +311,28 @@ export default function PropertiesDialog({ data, onClose }: PropertiesDialogProp
                         <tr key={row.idx} className={`border-t ${row.alt ? "bg-muted/30" : ""}`}>
                           <td className="px-3 py-2 text-muted-foreground">{row.label}</td>
                           <td className="px-2 py-2 text-center">
-                            <input
-                              type="checkbox"
-                              className="accent-primary cursor-pointer"
+                            <Checkbox
                               checked={hasBit(row.idx, 4)}
-                              onChange={(e) => updateBit(row.idx, 4, e.target.checked)}
+                              onCheckedChange={(checked) => updateBit(row.idx, 4, checked === true)}
                             />
                           </td>
                           <td className="px-2 py-2 text-center">
-                            <input
-                              type="checkbox"
-                              className="accent-primary cursor-pointer"
+                            <Checkbox
                               checked={hasBit(row.idx, 2)}
-                              onChange={(e) => updateBit(row.idx, 2, e.target.checked)}
+                              onCheckedChange={(checked) => updateBit(row.idx, 2, checked === true)}
                             />
                           </td>
                           <td className="px-2 py-2 text-center">
-                            <input
-                              type="checkbox"
-                              className="accent-primary cursor-pointer"
+                            <Checkbox
                               checked={hasBit(row.idx, 1)}
-                              onChange={(e) => updateBit(row.idx, 1, e.target.checked)}
+                              onCheckedChange={(checked) => updateBit(row.idx, 1, checked === true)}
                             />
                           </td>
                           <td className="px-2 py-2 text-center">
                             <label className="flex items-center justify-center gap-1.5 cursor-pointer text-[0.625rem]">
-                              <input
-                                type="checkbox"
-                                className="accent-primary cursor-pointer"
+                              <Checkbox
                                 checked={hasBit(row.sIdx, row.sBit)}
-                                onChange={(e) => updateBit(row.sIdx, row.sBit, e.target.checked)}
+                                onCheckedChange={(checked) => updateBit(row.sIdx, row.sBit, checked === true)}
                               />
                               {row.sLabel}
                             </label>

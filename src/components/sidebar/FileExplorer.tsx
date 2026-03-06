@@ -4,23 +4,41 @@ import { join, tempDir } from "@tauri-apps/api/path";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { openPath as openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
 import {
   MdArrowUpward,
+  MdContentCopy,
+  MdCreateNewFolder,
+  MdDelete,
+  MdDownload,
   MdFolderOff,
+  MdInfo,
+  MdLink,
+  MdNoteAdd,
   MdRefresh,
   MdSend,
+  MdUpload,
 } from "react-icons/md";
 import { toast } from "sonner";
 import AutoUploadDialog, { type AutoUploadDialogData } from "../dialog/file-explorer/AutoUploadDialog";
 import MoveDialog, { type MoveDialogData } from "../dialog/file-explorer/MoveDialog";
+import NewItemDialog, { type NewItemDialogData } from "../dialog/file-explorer/NewItemDialog";
+import NewSymlinkDialog, { type NewSymlinkDialogData } from "../dialog/file-explorer/NewSymlinkDialog";
 import PropertiesDialog, { type PropertiesDialogData } from "../dialog/file-explorer/PropertiesDialog";
 import RenameDialog, { type RenameDialogData } from "../dialog/file-explorer/RenameDialog";
 import DeleteDialog, { type DeleteDialogData } from "../dialog/file-explorer/DeleteDialog";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 
-import { FileEntry, FileExplorerProps } from "./file-explorer/types";
-import { formatSize } from "./file-explorer/utils";
-import { FileListItem } from "./file-explorer/FileListItem";
+import { FileEntry, FileExplorerProps } from "@/types/global";
+import { formatSize } from "@/lib/utils";
+import { FileListItem } from "./FileListItem";
 
 /** Remote file browser for active SSH session. Lists dirs/files, supports navigation. */
 export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
@@ -38,6 +56,8 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
   const [renameDialogData, setRenameDialogData] = useState<RenameDialogData | null>(null);
   const [deleteDialogData, setDeleteDialogData] = useState<DeleteDialogData | null>(null);
   const [moveDialogData, setMoveDialogData] = useState<MoveDialogData | null>(null);
+  const [newItemDialogData, setNewItemDialogData] = useState<NewItemDialogData | null>(null);
+  const [newSymlinkDialogData, setNewSymlinkDialogData] = useState<NewSymlinkDialogData | null>(null);
   const [autoUploadDialogData, setAutoUploadDialogData] = useState<AutoUploadDialogData | null>(
     null,
   );
@@ -205,6 +225,57 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
     }
   };
 
+  const handleNewFile = () => {
+    if (!activeSessionId) return;
+    setNewItemDialogData({
+      sessionId: activeSessionId,
+      currentDirPath: currentPath,
+      type: "file",
+    });
+  };
+
+  const handleNewFolder = () => {
+    if (!activeSessionId) return;
+    setNewItemDialogData({
+      sessionId: activeSessionId,
+      currentDirPath: currentPath,
+      type: "folder",
+    });
+  };
+
+  const handleNewSymlink = () => {
+    if (!activeSessionId) return;
+    setNewSymlinkDialogData({ sessionId: activeSessionId, currentDirPath: currentPath });
+  };
+
+  const handleCurrentDirProperties = () => {
+    if (!activeSessionId || !currentPath) return;
+    const name = currentPath.split("/").filter(Boolean).pop() || currentPath;
+    setPropertiesDialogData({ sessionId: activeSessionId, fullPath: currentPath, name, is_dir: true });
+  };
+
+  const handleCopyCurrentPath = () => {
+    navigator.clipboard.writeText(currentPath);
+  };
+
+  const handleSendCurrentPathToTerminal = () => {
+    if (!activeSessionId) return;
+    invoke("write_to_session", { sessionId: activeSessionId, data: currentPath });
+    emit(`focus-terminal-${activeSessionId}`);
+  };
+
+  const handleDownloadSelected = () => {
+    if (!selectedFile) return;
+    const entry = files.find((f) => f.name === selectedFile);
+    if (entry) handleDownload(entry);
+  };
+
+  const handleDeleteSelected = () => {
+    if (!selectedFile) return;
+    const entry = files.find((f) => f.name === selectedFile);
+    if (entry) handleDelete(entry);
+  };
+
   const handleGoUp = () => {
     if (!currentPath || currentPath === "/") return;
     const parts = currentPath.split("/");
@@ -328,25 +399,57 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
         style={{ color: "var(--df-text-muted)", borderColor: "var(--df-border)" }}
       >
         <span>{t("panel.fileExplorer")}</span>
-        <div className="flex gap-1">
-          {activeSessionId && (
-            <>
-              <MdArrowUpward
-                className="text-sm cursor-pointer hover:opacity-80 transition-opacity"
-                style={{ color: "var(--df-text-muted)" }}
-                onClick={handleGoUp}
-                title={t("fileExplorer.goUp")}
-              />
-              <MdRefresh
-                className="text-sm cursor-pointer hover:opacity-80 transition-opacity"
-                style={{ color: "var(--df-text-muted)" }}
-                onClick={() => loadDirectory(currentPath)}
-                title={t("fileExplorer.refresh")}
-              />
-            </>
-          )}
-        </div>
       </div>
+
+      {activeSessionId && (
+        <div
+          className="flex items-center px-1.5 py-1 border-b gap-0.5"
+          style={{ backgroundColor: "var(--df-bg-panel)", borderColor: "var(--df-border)" }}
+        >
+
+          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md text-muted-foreground hover:text-foreground" onClick={handleNewFile} title={t("fileExplorer.newFile")}>
+            <MdNoteAdd className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md text-muted-foreground hover:text-foreground" onClick={handleNewFolder} title={t("fileExplorer.newFolder")}>
+            <MdCreateNewFolder className="h-4 w-4" />
+          </Button>
+
+          <div className="w-px h-4 mx-1" style={{ backgroundColor: "var(--df-border)" }} />
+
+          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md text-muted-foreground hover:text-foreground" onClick={handleUpload} title={t("fileExplorer.upload")}>
+            <MdUpload className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 rounded-md text-muted-foreground hover:text-foreground"
+            onClick={handleDownloadSelected}
+            title={t("fileExplorer.downloadSelected")}
+            disabled={!selectedFile || files.find((f) => f.name === selectedFile)?.is_dir}
+          >
+            <MdDownload className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 rounded-md text-muted-foreground hover:text-destructive"
+            onClick={handleDeleteSelected}
+            disabled={!selectedFile}
+            title={t("fileExplorer.delete")}
+          >
+            <MdDelete className="h-4 w-4" />
+          </Button>
+
+          <div className="w-px h-4 mx-1" style={{ backgroundColor: "var(--df-border)" }} />
+
+          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md text-muted-foreground hover:text-foreground" onClick={handleGoUp} title={t("fileExplorer.goUp")}>
+            <MdArrowUpward className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md text-muted-foreground hover:text-foreground" onClick={() => loadDirectory(currentPath)} title={t("fileExplorer.refresh")}>
+            <MdRefresh className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
 
       {activeSessionId && (
         <div
@@ -396,71 +499,114 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto p-2 text-sm terminal-scroll">
-        {!activeSessionId ? (
-          <div className="text-center py-8 text-xs" style={{ color: "var(--df-text-dimmed)" }}>
-            <MdFolderOff className="text-xl block mx-auto mb-2" />
-            <div className="text-sm block mb-2">{t("fileExplorer.connectToSession")}</div>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div className="flex-1 overflow-y-auto p-2 text-sm terminal-scroll">
+            {!activeSessionId ? (
+              <div className="text-center py-8 text-xs" style={{ color: "var(--df-text-dimmed)" }}>
+                <MdFolderOff className="text-xl block mx-auto mb-2" />
+                <div className="text-sm block mb-2">{t("fileExplorer.connectToSession")}</div>
+              </div>
+            ) : loading ? (
+              <div className="text-center py-4 text-xs" style={{ color: "var(--df-text-dimmed)" }}>
+                {t("fileExplorer.loading")}
+              </div>
+            ) : error ? (
+              <div className="text-center text-red-400 py-4 text-xs">{error}</div>
+            ) : files.length === 0 ? (
+              <div className="text-center py-4 text-xs" style={{ color: "var(--df-text-dimmed)" }}>
+                {t("fileExplorer.emptyDirectory")}
+              </div>
+            ) : (
+              <ul className="space-y-0.5">
+                {files.map((entry) => (
+                  <FileListItem
+                    key={entry.name}
+                    entry={entry}
+                    isSelected={selectedFile === entry.name}
+                    activeSessionId={activeSessionId}
+                    onSelect={(entry) => setSelectedFile(entry.name)}
+                    onItemClick={handleItemClick}
+                    onOpenDefault={handleOpenDefault}
+                    onRefresh={() => loadDirectory(currentPath)}
+                    onUpload={handleUpload}
+                    onDownload={handleDownload}
+                    onRename={(entry) => {
+                      if (activeSessionId)
+                        setRenameDialogData({
+                          sessionId: activeSessionId,
+                          oldPath: getEntryFullPath(entry),
+                          name: entry.name,
+                          currentDirPath: currentPath,
+                        });
+                    }}
+                    onMove={(entry) => {
+                      if (activeSessionId)
+                        setMoveDialogData({
+                          sessionId: activeSessionId,
+                          oldPath: getEntryFullPath(entry),
+                          name: entry.name,
+                        });
+                    }}
+                    onDelete={handleDelete}
+                    onCopyPath={handleCopyPath}
+                    onSendToTerminal={handleSendToTerminal}
+                    onProperties={(entry) => {
+                      if (activeSessionId) {
+                        setPropertiesDialogData({
+                          sessionId: activeSessionId,
+                          fullPath: getEntryFullPath(entry),
+                          name: entry.name,
+                          is_dir: entry.is_dir,
+                        });
+                      }
+                    }}
+                  />
+                ))}
+              </ul>
+            )}
           </div>
-        ) : loading ? (
-          <div className="text-center py-4 text-xs" style={{ color: "var(--df-text-dimmed)" }}>
-            {t("fileExplorer.loading")}
-          </div>
-        ) : error ? (
-          <div className="text-center text-red-400 py-4 text-xs">{error}</div>
-        ) : files.length === 0 ? (
-          <div className="text-center py-4 text-xs" style={{ color: "var(--df-text-dimmed)" }}>
-            {t("fileExplorer.emptyDirectory")}
-          </div>
-        ) : (
-          <ul className="space-y-0.5">
-            {files.map((entry) => (
-              <FileListItem
-                key={entry.name}
-                entry={entry}
-                isSelected={selectedFile === entry.name}
-                activeSessionId={activeSessionId}
-                onSelect={(entry) => setSelectedFile(entry.name)}
-                onItemClick={handleItemClick}
-                onOpenDefault={handleOpenDefault}
-                onRefresh={() => loadDirectory(currentPath)}
-                onUpload={handleUpload}
-                onDownload={handleDownload}
-                onRename={(entry) => {
-                  if (activeSessionId)
-                    setRenameDialogData({
-                      sessionId: activeSessionId,
-                      oldPath: getEntryFullPath(entry),
-                      name: entry.name,
-                      currentDirPath: currentPath,
-                    });
-                }}
-                onMove={(entry) => {
-                  if (activeSessionId)
-                    setMoveDialogData({
-                      sessionId: activeSessionId,
-                      oldPath: getEntryFullPath(entry),
-                      name: entry.name,
-                    });
-                }}
-                onDelete={handleDelete}
-                onCopyPath={handleCopyPath}
-                onSendToTerminal={handleSendToTerminal}
-                onProperties={(entry) => {
-                  if (activeSessionId) {
-                    setPropertiesDialogData({
-                      sessionId: activeSessionId,
-                      fullPath: getEntryFullPath(entry),
-                      name: entry.name,
-                      is_dir: entry.is_dir,
-                    });
-                  }
-                }}
-              />
-            ))}
-          </ul>
+        </ContextMenuTrigger>
+        {activeSessionId && (
+          <ContextMenuContent className="w-52">
+            <ContextMenuItem onClick={() => loadDirectory(currentPath)}>
+              <MdRefresh className="mr-2 h-4 w-4" />
+              {t("fileExplorer.refresh")}
+            </ContextMenuItem>
+            <ContextMenuItem onClick={handleUpload}>
+              <MdUpload className="mr-2 h-4 w-4" />
+              {t("fileExplorer.upload")}
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={handleNewFile}>
+              <MdNoteAdd className="mr-2 h-4 w-4" />
+              {t("fileExplorer.newFile")}
+            </ContextMenuItem>
+            <ContextMenuItem onClick={handleNewFolder}>
+              <MdCreateNewFolder className="mr-2 h-4 w-4" />
+              {t("fileExplorer.newFolder")}
+            </ContextMenuItem>
+            <ContextMenuItem onClick={handleNewSymlink}>
+              <MdLink className="mr-2 h-4 w-4" />
+              {t("fileExplorer.newSymlink")}
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={handleCopyCurrentPath}>
+              <MdContentCopy className="mr-2 h-4 w-4" />
+              {t("fileExplorer.copyDirPath")}
+            </ContextMenuItem>
+            <ContextMenuItem onClick={handleSendCurrentPathToTerminal}>
+              <MdSend className="mr-2 h-4 w-4" />
+              {t("fileExplorer.sendDirPathToTerminal")}
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={handleCurrentDirProperties}>
+              <MdInfo className="mr-2 h-4 w-4" />
+              {t("fileExplorer.properties")}
+            </ContextMenuItem>
+          </ContextMenuContent>
         )}
-      </div>
+      </ContextMenu>
 
       {activeSessionId &&
         !loading &&
@@ -473,7 +619,7 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
 
           return (
             <div
-              className="px-2 py-1.5 text-[0.625rem] border-t flex items-center justify-between shrink-0"
+              className="px-2 py-1.5 text-[0.6875rem] border-t flex items-center justify-between shrink-0"
               style={{
                 color: "var(--df-text-dimmed)",
                 borderColor: "var(--df-border)",
@@ -484,11 +630,10 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
                 <span>{t("fileExplorer.totalItems", { count: totalItems })}</span>
                 {hasFiles && <span>{formatSize(totalSize)}</span>}
               </div>
-              <MdSend
-                className="text-sm cursor-pointer hover:opacity-80 transition-opacity flex items-center justify-center p-0.5 rounded"
-                style={{ color: "var(--df-text-muted)" }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--df-bg-hover)")}
-                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "")}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 rounded-md text-muted-foreground hover:text-foreground"
                 onClick={() => {
                   if (activeSessionId && currentPath) {
                     invoke("write_to_session", {
@@ -499,7 +644,9 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
                   }
                 }}
                 title={t("fileExplorer.sendToTerminal")}
-              />
+              >
+                <MdSend className="h-[0.875rem] w-[0.875rem]" />
+              </Button>
             </div>
           );
         })()}
@@ -528,6 +675,30 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
         />
       )}
 
+      {newItemDialogData && (
+        <NewItemDialog
+          data={newItemDialogData}
+          onClose={() => setNewItemDialogData(null)}
+          onSuccess={async (result) => {
+            await loadDirectory(currentPath);
+            if (result.openAfterCreate) {
+              const mockEntry: FileEntry = {
+                name: result.name,
+                is_dir: result.is_dir,
+                is_symlink: false,
+                size: 0,
+                permissions: "",
+              };
+              if (result.is_dir) {
+                handleItemClick(mockEntry);
+              } else {
+                handleOpenDefault(mockEntry);
+              }
+            }
+          }}
+        />
+      )}
+
       {autoUploadDialogData && (
         <AutoUploadDialog
           data={autoUploadDialogData}
@@ -543,6 +714,14 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
         <PropertiesDialog
           data={propertiesDialogData}
           onClose={() => setPropertiesDialogData(null)}
+        />
+      )}
+
+      {newSymlinkDialogData && (
+        <NewSymlinkDialog
+          data={newSymlinkDialogData}
+          onClose={() => setNewSymlinkDialogData(null)}
+          onSuccess={() => loadDirectory(currentPath)}
         />
       )}
     </aside>
