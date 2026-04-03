@@ -1,0 +1,82 @@
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useTranslation } from "react-i18next";
+
+interface SerialFormProps {
+  serialPortName: string;
+  setSerialPortName: (v: string) => void;
+  baudRate: string;
+  setBaudRate: (v: string) => void;
+  dataBits: string;
+  setDataBits: (v: string) => void;
+  parity: string;
+  setParity: (v: string) => void;
+  stopBits: string;
+  setStopBits: (v: string) => void;
+}
+
+export function SerialForm({ serialPortName, setSerialPortName, baudRate, setBaudRate, dataBits, setDataBits, parity, setParity, stopBits, setStopBits }: SerialFormProps) {
+  const { t } = useTranslation();
+  return (
+    <div className="space-y-4 w-full">
+      <div className="flex gap-3">
+        <div className="flex-1">
+          <Label className="text-[0.6875rem] text-muted-foreground">{t("dialog.serialPort", "Serial Port")}</Label>
+          <Input className="mt-1 text-xs h-8" placeholder={t("dialog.serialPortPlaceholder", "COM1 or /dev/ttyS0")} value={serialPortName} onChange={(e) => setSerialPortName(e.target.value)} />
+        </div>
+        <div className="w-32">
+          <Label className="text-[0.6875rem] text-muted-foreground">{t("dialog.baudRate", "Baud Rate")}</Label>
+          <Select value={baudRate} onValueChange={setBaudRate}>
+            <SelectTrigger className="mt-1 h-8 text-xs font-normal"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="9600">9600</SelectItem>
+              <SelectItem value="19200">19200</SelectItem>
+              <SelectItem value="38400">38400</SelectItem>
+              <SelectItem value="57600">57600</SelectItem>
+              <SelectItem value="115200">115200</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="flex gap-3">
+        <div className="flex-1">
+          <Label className="text-[0.6875rem] text-muted-foreground">{t("dialog.dataBits", "Data Bits")}</Label>
+          <Select value={dataBits} onValueChange={setDataBits}>
+            <SelectTrigger className="mt-1 h-8 text-xs font-normal"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="5">5</SelectItem>
+              <SelectItem value="6">6</SelectItem>
+              <SelectItem value="7">7</SelectItem>
+              <SelectItem value="8">8</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex-1">
+          <Label className="text-[0.6875rem] text-muted-foreground">{t("dialog.parity", "Parity")}</Label>
+          <Select value={parity} onValueChange={setParity}>
+            <SelectTrigger className="mt-1 h-8 text-xs font-normal"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">{t("dialog.parityNone", "None")}</SelectItem>
+              <SelectItem value="odd">{t("dialog.parityOdd", "Odd")}</SelectItem>
+              <SelectItem value="even">{t("dialog.parityEven", "Even")}</SelectItem>
+              <SelectItem value="mark">{t("dialog.parityMark", "Mark")}</SelectItem>
+              <SelectItem value="space">{t("dialog.paritySpace", "Space")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex-1">
+          <Label className="text-[0.6875rem] text-muted-foreground">{t("dialog.stopBits", "Stop Bits")}</Label>
+          <Select value={stopBits} onValueChange={setStopBits}>
+            <SelectTrigger className="mt-1 h-8 text-xs font-normal"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">1</SelectItem>
+              <SelectItem value="1.5">1.5</SelectItem>
+              <SelectItem value="2">2</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    </div>
+  );
+}
