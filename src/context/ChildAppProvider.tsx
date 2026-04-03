@@ -51,6 +51,12 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     keyword_highlights_enabled: true,
     keyword_highlights_across_wrapped_lines: false,
     keyword_highlights: [],
+    action_links_enabled: true,
+    action_links_matchers: {
+      ipv4: true,
+      archive: true,
+      host_port: true,
+    },
   },
   interaction: {
     copy_on_select: false,

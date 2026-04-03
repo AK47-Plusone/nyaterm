@@ -12,6 +12,12 @@ import { getBuiltinRules, hexLuminance } from "@/lib/keywordHighlightPresets";
 import type { KeywordHighlightRule } from "@/types/global";
 import { SettingNumberInput, SettingRow, SettingSwitch } from "./SettingFormItems";
 
+const DEFAULT_ACTION_LINK_MATCHERS = {
+  ipv4: true,
+  archive: true,
+  host_port: true,
+} as const;
+
 export function TerminalTab() {
   const { t } = useTranslation();
   const { appSettings, updateAppSettings, updateUi } = useApp();
@@ -26,6 +32,9 @@ export function TerminalTab() {
 
   const builtinRules = useMemo(() => getBuiltinRules(isDark), [isDark]);
   const userRules = appSettings.terminal.keyword_highlights ?? [];
+  const actionLinksEnabled = appSettings.terminal.action_links_enabled ?? true;
+  const actionLinkMatchers =
+    appSettings.terminal.action_links_matchers ?? DEFAULT_ACTION_LINK_MATCHERS;
 
   function updateRules(next: KeywordHighlightRule[]) {
     updateAppSettings({ terminal: { ...appSettings.terminal, keyword_highlights: next } });
@@ -104,11 +113,86 @@ export function TerminalTab() {
         />
       </SettingRow>
 
+      {/* ── Action Links ─────────────────────────────────────────────────── */}
+      <div className="space-y-3 pt-2 border-t">
+        <SettingRow
+          label={t("settings.actionLinks")}
+          desc={t("settings.actionLinksDesc")}
+        >
+          <SettingSwitch
+            checked={actionLinksEnabled}
+            onChange={(v) =>
+              updateAppSettings({
+                terminal: { ...appSettings.terminal, action_links_enabled: v },
+              })
+            }
+          />
+        </SettingRow>
+
+        <div
+          className={`space-y-1 transition-opacity ${
+            actionLinksEnabled ? "" : "opacity-50 pointer-events-none"
+          }`}
+        >
+          <Label className="font-medium text-sm">{t("settings.actionLinksMatchers")}</Label>
+          <div className="border rounded-md overflow-hidden divide-y">
+            {(
+              [
+                {
+                  key: "ipv4" as const,
+                  label: t("settings.actionLinksMatcherIpv4"),
+                  example: "192.168.1.1",
+                  desc: t("settings.actionLinksMatcherIpv4Desc"),
+                },
+                {
+                  key: "host_port" as const,
+                  label: t("settings.actionLinksMatcherHostPort"),
+                  example: "localhost:8080",
+                  desc: t("settings.actionLinksMatcherHostPortDesc"),
+                },
+                {
+                  key: "archive" as const,
+                  label: t("settings.actionLinksMatcherArchive"),
+                  example: "backup.tar.gz",
+                  desc: t("settings.actionLinksMatcherArchiveDesc"),
+                },
+              ] as const
+            ).map(({ key, label, example, desc }) => (
+              <div key={key} className="flex items-center gap-3 px-3 py-2 bg-muted/20">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{label}</span>
+                    <span className="text-[11px] font-mono text-muted-foreground/70 bg-muted px-1.5 py-0.5 rounded">
+                      {example}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+                </div>
+                <Switch
+                  checked={actionLinkMatchers[key]}
+                  onCheckedChange={(v) =>
+                    updateAppSettings({
+                      terminal: {
+                        ...appSettings.terminal,
+                        action_links_matchers: {
+                          ...actionLinkMatchers,
+                          [key]: v,
+                        },
+                      },
+                    })
+                  }
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* ── Keyword Highlighting ──────────────────────────────────────────── */}
       <div className="space-y-3 pt-2 border-t">
         <SettingRow
-          label={t("settings.keywordHighlighting")}
-          desc={t("settings.keywordHighlightingDesc")}
+          label={t("settings.keywordHighlightingExperimental")}
+          desc={t("settings.keywordHighlightingExperimentalDesc")}
         >
           <SettingSwitch
             checked={appSettings.terminal.keyword_highlights_enabled ?? true}
@@ -125,6 +209,7 @@ export function TerminalTab() {
           desc={t("settings.keywordHighlightWrappedLinesDesc")}
         >
           <SettingSwitch
+            disabled={!appSettings.terminal.keyword_highlights_enabled}
             checked={appSettings.terminal.keyword_highlights_across_wrapped_lines ?? false}
             onChange={(v) =>
               updateAppSettings({

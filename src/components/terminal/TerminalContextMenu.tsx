@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { Terminal } from "@xterm/xterm";
 import { useCallback, useState } from "react";
@@ -15,32 +14,30 @@ import {
   MdTravelExplore,
 } from "react-icons/md";
 import { useApp } from "@/context/AppContext";
+import { MOD } from "@/hooks/useGlobalShortcuts";
 import type { SearchEngine } from "@/types/global";
-import { SEARCH_ICONS, type QuickIconDef } from "../icons";
 import TranslationDialog from "../dialog/terminal/TranslationDialog";
+import { type QuickIconDef, SEARCH_ICONS } from "../icons";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuShortcut,
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
   ContextMenuTrigger,
-  ContextMenuShortcut,
 } from "../ui/context-menu";
-import { MOD } from "@/hooks/useGlobalShortcuts";
 
 interface TerminalContextMenuProps {
   children: React.ReactNode;
-  sessionId: string;
   terminalRef: React.RefObject<Terminal | null>;
   onFind: (selection?: string) => void;
 }
 
 export default function TerminalContextMenu({
   children,
-  sessionId,
   terminalRef,
   onFind,
 }: TerminalContextMenuProps) {
@@ -49,14 +46,35 @@ export default function TerminalContextMenu({
 
   const [ctxSelection, setCtxSelection] = useState({ text: "", hasSelection: false });
   const [translateState, setTranslateState] = useState({ open: false, text: "", provider: "" });
+  const pasteText = useCallback(
+    (text: string) => {
+      if (!text) return;
+      terminalRef.current?.paste(text);
+    },
+    [terminalRef],
+  );
 
   const translationProviders = [
     { id: "google", free: true },
     { id: "microsoft", free: true },
     { id: "deepl", free: false, configured: !!appSettings.translation.deepl_api_key },
-    { id: "baidu", free: false, configured: !!(appSettings.translation.baidu_app_id && appSettings.translation.baidu_app_key) },
-    { id: "ali", free: false, configured: !!(appSettings.translation.ali_app_id && appSettings.translation.ali_app_key) },
-    { id: "youdao", free: false, configured: !!(appSettings.translation.youdao_app_id && appSettings.translation.youdao_app_key) },
+    {
+      id: "baidu",
+      free: false,
+      configured: !!(appSettings.translation.baidu_app_id && appSettings.translation.baidu_app_key),
+    },
+    {
+      id: "ali",
+      free: false,
+      configured: !!(appSettings.translation.ali_app_id && appSettings.translation.ali_app_key),
+    },
+    {
+      id: "youdao",
+      free: false,
+      configured: !!(
+        appSettings.translation.youdao_app_id && appSettings.translation.youdao_app_key
+      ),
+    },
   ].filter((p) => p.free || p.configured);
 
   // Right-click context menu: capture selection state
@@ -75,9 +93,7 @@ export default function TerminalContextMenu({
       (async () => {
         try {
           const text = await navigator.clipboard.readText();
-          if (text) {
-            invoke("write_to_session", { sessionId, data: text }).catch(() => { });
-          }
+          pasteText(text);
         } catch {
           /* clipboard access denied */
         }
@@ -92,14 +108,12 @@ export default function TerminalContextMenu({
   const doPaste = useCallback(async () => {
     try {
       const text = await navigator.clipboard.readText();
-      if (text) {
-        invoke("write_to_session", { sessionId, data: text }).catch(() => { });
-      }
+      pasteText(text);
     } catch {
       /* clipboard access denied */
     }
     terminalRef.current?.focus();
-  }, [sessionId, terminalRef]);
+  }, [pasteText, terminalRef]);
 
   const doCopy = useCallback(
     (text: string) => {
@@ -114,7 +128,7 @@ export default function TerminalContextMenu({
       const searchSettings = appSettings?.search;
       let url = `https://www.google.com/search?q=${encodeURIComponent(text)}`;
 
-      if (engine && engine.url_template) {
+      if (engine?.url_template) {
         url = engine.url_template.replace("%s", encodeURIComponent(text));
       } else if (searchSettings && searchSettings.custom_engines.length > 0) {
         const defaultEngine = searchSettings.custom_engines[0];
@@ -129,11 +143,9 @@ export default function TerminalContextMenu({
   );
 
   const doPasteSelected = useCallback(() => {
-    if (ctxSelection.text) {
-      invoke("write_to_session", { sessionId, data: ctxSelection.text }).catch(() => { });
-    }
+    pasteText(ctxSelection.text);
     terminalRef.current?.focus();
-  }, [sessionId, ctxSelection.text, terminalRef]);
+  }, [ctxSelection.text, pasteText, terminalRef]);
 
   const doClearScreen = useCallback(() => {
     terminalRef.current?.clear();
@@ -179,7 +191,7 @@ export default function TerminalContextMenu({
                 <ContextMenuSubContent>
                   {appSettings?.search?.custom_engines?.map((engine) => {
                     let IconComponent = null;
-                    let color = undefined;
+                    let color: string | undefined;
                     if (engine.icon && SEARCH_ICONS[engine.icon]) {
                       const iconDef = SEARCH_ICONS[engine.icon] as QuickIconDef;
                       IconComponent = iconDef.icon;

@@ -114,6 +114,31 @@ body,
   user-select: text;
 }
 
+.xterm .xterm-link-popup {
+  position: absolute;
+  z-index: 20;
+  max-width: min(36rem, calc(100% - 1rem));
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--df-border);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--df-bg-panel) 96%, black 4%);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 22%);
+  color: var(--df-text);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.xterm .xterm-link-popup__url {
+  font-family: var(--font-mono);
+}
+
+.xterm .xterm-link-popup__hint {
+  margin-top: 0.25rem;
+  color: var(--df-text-muted);
+}
+
 /* ── Animations ─────────────────────────────────────────────────────────── */
 @keyframes blink {
 

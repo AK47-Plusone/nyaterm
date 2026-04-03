@@ -79,7 +79,12 @@ export interface RestorableTab {
   connection_id?: string;
 }
 
-export type PanelId = "fileExplorer" | "fileTransfer" | "savedConnections" | "activeSessions" | "commandHistory";
+export type PanelId =
+  | "fileExplorer"
+  | "fileTransfer"
+  | "savedConnections"
+  | "activeSessions"
+  | "commandHistory";
 
 export interface PanelLayout {
   left: PanelId[];
@@ -165,12 +170,12 @@ export interface AppearanceSettings {
   cursor_style: string;
   cursor_blink: boolean;
   ui_font_size: number;
+  terminal_theme: string | null;
 }
 
 export interface ProxySettings {
   enabled: boolean;
   protocol: string;
-  terminal_theme: string | null;
   host: string;
   port: number;
 }
@@ -224,6 +229,12 @@ export interface KeywordHighlightRule {
   enabled: boolean;
 }
 
+export interface ActionLinksMatcherSettings {
+  ipv4: boolean;
+  archive: boolean;
+  host_port: boolean;
+}
+
 export interface TerminalSettings {
   scrollback_lines: number;
   keep_alive_interval: number;
@@ -231,6 +242,8 @@ export interface TerminalSettings {
   keyword_highlights_enabled: boolean;
   keyword_highlights_across_wrapped_lines: boolean;
   keyword_highlights: KeywordHighlightRule[];
+  action_links_enabled: boolean;
+  action_links_matchers: ActionLinksMatcherSettings;
 }
 
 export interface InteractionSettings {

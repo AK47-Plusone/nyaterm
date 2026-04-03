@@ -242,6 +242,26 @@ fn default_highlight_color_light() -> String {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActionLinksMatcherSettings {
+    #[serde(default = "default_true")]
+    pub ipv4: bool,
+    #[serde(default = "default_true")]
+    pub archive: bool,
+    #[serde(default = "default_true")]
+    pub host_port: bool,
+}
+
+impl Default for ActionLinksMatcherSettings {
+    fn default() -> Self {
+        Self {
+            ipv4: true,
+            archive: true,
+            host_port: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TerminalSettings {
     #[serde(default = "default_scrollback")]
     pub scrollback_lines: u32,
@@ -255,6 +275,10 @@ pub struct TerminalSettings {
     pub keyword_highlights_across_wrapped_lines: bool,
     #[serde(default)]
     pub keyword_highlights: Vec<KeywordHighlightRule>,
+    #[serde(default = "default_true")]
+    pub action_links_enabled: bool,
+    #[serde(default)]
+    pub action_links_matchers: ActionLinksMatcherSettings,
 }
 
 fn default_scrollback() -> u32 {
@@ -273,6 +297,8 @@ impl Default for TerminalSettings {
             keyword_highlights_enabled: true,
             keyword_highlights_across_wrapped_lines: false,
             keyword_highlights: Vec::new(),
+            action_links_enabled: true,
+            action_links_matchers: ActionLinksMatcherSettings::default(),
         }
     }
 }
