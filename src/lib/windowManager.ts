@@ -1,4 +1,6 @@
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
+import { emit } from "@tauri-apps/api/event";
 import i18n from "../i18n";
 
 interface ChildWindowOptions {
@@ -7,18 +9,81 @@ interface ChildWindowOptions {
   url: string;
   width?: number;
   height?: number;
-  alwaysOnTop?: boolean;
   resizable?: boolean;
+}
+
+const MAIN_WINDOW_LABEL = "main";
+const MODAL_WINDOW_LABELS = new Set(["settings", "new-session", "quick-command"]);
+const AUTO_UPLOAD_WINDOW_PREFIX = "auto-upload-";
+
+export function isModalChildLabel(label: string) {
+  return MODAL_WINDOW_LABELS.has(label) || label.startsWith(AUTO_UPLOAD_WINDOW_PREFIX);
+}
+
+async function getMainWindow() {
+  return (await WebviewWindow.getByLabel(MAIN_WINDOW_LABEL)) ?? getCurrentWindow();
+}
+
+async function getOpenModalChildWindows() {
+  const windows = await WebviewWindow.getAll();
+  return windows.filter((window) => window.label !== MAIN_WINDOW_LABEL && isModalChildLabel(window.label));
+}
+
+async function applyModalWindowState(excludedLabel?: string) {
+  const [mainWindow, modalWindows] = await Promise.all([
+    getMainWindow(),
+    getOpenModalChildWindows(),
+  ]);
+  const remainingModalWindows = excludedLabel
+    ? modalWindows.filter((window) => window.label !== excludedLabel)
+    : modalWindows;
+  const hasModalChild = remainingModalWindows.length > 0;
+
+  await mainWindow.setEnabled(!hasModalChild).catch(() => { });
+  await mainWindow.setFocusable(!hasModalChild).catch(() => { });
+
+  if (hasModalChild) {
+    const topModalWindow = remainingModalWindows[remainingModalWindows.length - 1];
+    await topModalWindow.show().catch(() => { });
+    await topModalWindow.setAlwaysOnTop(true).catch(() => { });
+    await topModalWindow.setFocus().catch(() => { });
+    return;
+  }
+
+  await mainWindow.show().catch(() => { });
+  await mainWindow.setFocus().catch(() => { });
+}
+
+export async function syncMainWindowModalState() {
+  await applyModalWindowState();
+}
+
+export async function prepareForModalChildClose(closingLabel: string) {
+  await applyModalWindowState(closingLabel);
+}
+
+export async function bounceTopModalWindow() {
+  const modalWindows = await getOpenModalChildWindows();
+  const topModalWindow = modalWindows[modalWindows.length - 1];
+  if (!topModalWindow) return;
+
+  await topModalWindow.requestUserAttention(UserAttentionType.Critical).catch(() => { });
+  await topModalWindow.setAlwaysOnTop(true).catch(() => { });
+  await topModalWindow.setFocus().catch(() => { });
 }
 
 export async function openChildWindow(opts: ChildWindowOptions) {
   const existing = await WebviewWindow.getByLabel(opts.label);
   if (existing) {
     await existing.setTitle(opts.title).catch(() => { });
-    await existing.setFocus();
+    await existing.show().catch(() => { });
+    await existing.setAlwaysOnTop(true).catch(() => { });
+    await existing.setFocus().catch(() => { });
+    await syncMainWindowModalState().catch(() => { });
     return existing;
   }
-  return new WebviewWindow(opts.label, {
+  const parentWindow = await getMainWindow();
+  const win = new WebviewWindow(opts.label, {
     url: opts.url,
     title: opts.title,
     width: opts.width ?? 720,
@@ -26,8 +91,23 @@ export async function openChildWindow(opts: ChildWindowOptions) {
     visible: false,
     center: true,
     resizable: opts.resizable ?? true,
-    alwaysOnTop: opts.alwaysOnTop ?? false,
+    alwaysOnTop: isModalChildLabel(opts.label),
+    parent: parentWindow,
   });
+  win.once("tauri://created", () => {
+    emit("child-window-opened", { label: opts.label });
+    void win.setAlwaysOnTop(true).catch(() => { });
+    void win.setFocus().catch(() => { });
+    void syncMainWindowModalState();
+  });
+  win.once("tauri://destroyed", () => {
+    emit("child-window-closed", { label: opts.label });
+    void syncMainWindowModalState();
+  });
+  win.once("tauri://error", () => {
+    void syncMainWindowModalState();
+  });
+  return win;
 }
 
 export function openSettings(tab?: string) {
@@ -81,6 +161,5 @@ export function openAutoUpload(data: { sessionId: string; localPath: string; rem
     width: 440,
     height: 240,
     resizable: false,
-    alwaysOnTop: true,
   });
 }

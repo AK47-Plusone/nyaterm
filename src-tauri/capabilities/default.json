@@ -32,7 +32,13 @@
     "dialog:default",
     "core:window:allow-show",
     "core:window:allow-close",
+    "core:window:allow-destroy",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-set-enabled",
     "core:window:allow-set-focus",
+    "core:window:allow-set-focusable",
+    "core:window:allow-start-dragging",
+    "core:window:allow-request-user-attention",
     "core:event:default",
     "core:webview:allow-create-webview-window"
   ]

@@ -28,7 +28,12 @@ import {
   decreaseTerminalFontSize,
   increaseTerminalFontSize,
 } from "./lib/terminalFontSize";
-import { openNewSession, openSettings } from "./lib/windowManager";
+import {
+  bounceTopModalWindow,
+  openNewSession,
+  openSettings,
+  syncMainWindowModalState,
+} from "./lib/windowManager";
 import type { AppSettings, PanelId, PanelLayout, SavedConnection, UiConfig } from "./types/global";
 
 const PANEL_VISIBILITY: Record<PanelId, keyof UiConfig & `show_${string}`> = {
@@ -96,6 +101,9 @@ function App() {
   const [showAbout, setShowAbout] = useState(false);
   const lastCtrlWheelZoomAtRef = useRef(0);
 
+  // Child window modal overlay
+  const [childWindowCount, setChildWindowCount] = useState(0);
+
   // Idle auto-lock
   useIdleLock(
     appSettings.security.enable_screen_lock ? appSettings.security.idle_lock_minutes : 0,
@@ -149,6 +157,44 @@ function App() {
       unsubs.forEach((p) => p.then((unsub) => unsub()));
     };
   }, [addTab, addPendingTab, updateTabSession, closeTab, updateAppSettings]);
+
+  // Track child window open/close for modal overlay
+  useEffect(() => {
+    const unsubs = [
+      listen<{ label: string }>("child-window-opened", () => {
+        setChildWindowCount((c) => c + 1);
+        void syncMainWindowModalState();
+      }),
+      listen<{ label: string }>("child-window-closed", () => {
+        setChildWindowCount((c) => Math.max(0, c - 1));
+        void syncMainWindowModalState();
+      }),
+    ];
+    return () => {
+      unsubs.forEach((p) => p.then((unsub) => unsub()));
+    };
+  }, []);
+
+  useEffect(() => {
+    let unlistenFocusChanged: (() => void) | undefined;
+
+    import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
+      getCurrentWindow()
+        .onFocusChanged(({ payload: focused }) => {
+          if (!focused || childWindowCount === 0) return;
+          void syncMainWindowModalState();
+          void bounceTopModalWindow();
+        })
+        .then((unlisten) => {
+          unlistenFocusChanged = unlisten;
+        })
+        .catch(() => { });
+    });
+
+    return () => {
+      unlistenFocusChanged?.();
+    };
+  }, [childWindowCount]);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
 
@@ -204,7 +250,7 @@ function App() {
   const handleCloseActiveTab = useCallback(() => {
     if (!activeTab) return;
     if (!activeTab.connecting) {
-      invoke("close_session", { sessionId: activeTab.sessionId }).catch(() => {});
+      invoke("close_session", { sessionId: activeTab.sessionId }).catch(() => { });
     }
     closeTab(activeTab.id);
   }, [activeTab, closeTab]);
@@ -296,7 +342,7 @@ function App() {
 
   const handleToggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
+      document.documentElement.requestFullscreen().catch(() => { });
     } else {
       document.exitFullscreen();
     }
@@ -673,6 +719,18 @@ function App() {
         <AboutDialog open={showAbout} onClose={() => setShowAbout(false)} />
 
         <Toaster position="bottom-right" />
+
+        {/* Child Window Modal Overlay */}
+        {childWindowCount > 0 && (
+          <div
+            className="fixed inset-0 z-[9998]"
+            style={{
+              backgroundColor: "rgba(0, 0, 0, 0.3)",
+              backdropFilter: "blur(4px)",
+              WebkitBackdropFilter: "blur(4px)",
+            }}
+          />
+        )}
 
         {/* Lock Screen Overlay */}
         {isLocked && (

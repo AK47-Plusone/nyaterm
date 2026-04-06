@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useTranslation } from "react-i18next";
+import { isModalChildLabel, prepareForModalChildClose } from "./lib/windowManager";
 
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const NewSessionPage = lazy(() => import("./pages/NewSessionPage"));
@@ -19,7 +20,31 @@ export default function ChildWindowRouter({ windowType }: { windowType: string }
   const Page = PAGES[windowType];
 
   useEffect(() => {
-    getCurrentWindow().show().catch(() => { });
+    const currentWindow = getCurrentWindow();
+    let unlistenCloseRequested: (() => void) | undefined;
+    let programmaticClose = false;
+
+    currentWindow.show().catch(() => { });
+
+    currentWindow
+      .onCloseRequested(async (event) => {
+        if (programmaticClose || !isModalChildLabel(currentWindow.label)) return;
+
+        programmaticClose = true;
+        event.preventDefault();
+        await prepareForModalChildClose(currentWindow.label).catch(() => { });
+        await currentWindow.close().catch(() => {
+          programmaticClose = false;
+        });
+      })
+      .then((unlisten) => {
+        unlistenCloseRequested = unlisten;
+      })
+      .catch(() => { });
+
+    return () => {
+      unlistenCloseRequested?.();
+    };
   }, []);
 
   if (!Page) {
