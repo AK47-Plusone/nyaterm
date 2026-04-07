@@ -4,10 +4,10 @@ import { useTranslation } from "react-i18next";
 import {
   MdMouse,
   MdPalette,
-  MdRouter,
   MdSearch,
   MdSecurity,
   MdSettings,
+  MdSwapHoriz,
   MdTerminal,
   MdTranslate,
   MdVpnKey,
@@ -16,10 +16,10 @@ import ChildWindowHeader from "@/components/layout/ChildWindowHeader";
 import { AppearanceTab } from "@/components/settings/AppearanceTab";
 import { GeneralTab } from "@/components/settings/GeneralTab";
 import { InteractionTab } from "@/components/settings/InteractionTab";
-import { ProxyTab } from "@/components/settings/ProxyTab";
 import { SearchTab } from "@/components/settings/SearchTab";
 import { SecurityTab } from "@/components/settings/SecurityTab";
 import { TerminalTab } from "@/components/settings/TerminalTab";
+import { TransferTab } from "@/components/settings/TransferTab";
 import { TranslationTab } from "@/components/settings/TranslationTab";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/context/AppContext";
@@ -41,7 +41,7 @@ export default function SettingsPage() {
       icon: "palette",
       Component: AppearanceTab,
     },
-    { id: "proxy", label: t("settings.proxy"), icon: "router", Component: ProxyTab },
+    { id: "transfer", label: t("settings.transfer"), icon: "swap_horiz", Component: TransferTab },
     { id: "search", label: t("settings.search"), icon: "search", Component: SearchTab },
     {
       id: "translation",
@@ -64,7 +64,7 @@ export default function SettingsPage() {
   const iconMap: Record<string, React.ElementType> = {
     settings: MdSettings,
     palette: MdPalette,
-    router: MdRouter,
+    swap_horiz: MdSwapHoriz,
     search: MdSearch,
     translate: MdTranslate,
     security: MdSecurity,

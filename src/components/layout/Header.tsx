@@ -21,12 +21,14 @@ import {
   MdRestartAlt,
   MdSelectAll,
   MdSettings,
+  MdTerminal,
   MdTranslate,
   MdUpdate,
   MdViewSidebar,
   MdZoomIn,
   MdZoomOut,
 } from "react-icons/md";
+import { BiServer } from "react-icons/bi";
 import packageJson from "../../../package.json";
 import { useApp } from "../../context/AppContext";
 import { useTheme } from "../../context/ThemeContext";
@@ -39,7 +41,19 @@ import {
 } from "../../lib/terminalFontSize";
 import DragonflyLogo from "../DragonflyLogo";
 import ImportDialog from "../dialog/saved-connections/ImportDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
+import type { SavedConnection, Tab } from "../../types/global";
 
+import { SYSTEM_ICONS } from "../icons";
 import {
   Menubar,
   MenubarCheckboxItem,
@@ -88,6 +102,8 @@ interface HeaderProps {
   onToggleLeft?: () => void;
   onToggleRight?: () => void;
   onAbout: () => void;
+  activeTab?: Tab | null;
+  savedConnections?: SavedConnection[];
 }
 
 interface MenuItem {
@@ -106,14 +122,20 @@ export default function Header({
   onToggleLeft,
   onToggleRight,
   onAbout,
+  activeTab,
+  savedConnections,
 }: HeaderProps) {
   const [appWindow] = useState(() => getCurrentWindow());
   const { themeName, setTheme, themeNames } = useTheme();
-  const { updateAppSettings, updateUi } = useApp();
+  const { updateAppSettings, updateUi, appSettings, tabs } = useApp();
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const { t, i18n } = useTranslation();
-  const appTitle = document.title || "Dragonfly";
+
+  const activeConnection = activeTab?.connectionId
+    ? savedConnections?.find((c) => c.id === activeTab.connectionId)
+    : undefined;
 
   useEffect(() => {
     let mounted = true;
@@ -341,6 +363,15 @@ export default function Header({
   };
 
   const handleCloseWindow = () => {
+    if (tabs.length > 0 && appSettings.general.confirm_on_close !== false) {
+      setShowCloseConfirm(true);
+    } else {
+      appWindow.close().catch(() => {});
+    }
+  };
+
+  const handleConfirmClose = () => {
+    setShowCloseConfirm(false);
     appWindow.close().catch(() => {});
   };
 
@@ -350,6 +381,8 @@ export default function Header({
       style={{ backgroundColor: "var(--df-bg-panel)", borderColor: "var(--df-border)" }}
     >
       <div className="flex items-center gap-2 shrink-0">
+        <DragonflyLogo className="h-5 w-5 shrink-0" onDoubleClick={handleToggleMaximizeWindow} />
+
         {/* Mobile Left Toggle */}
         <button
           className="lg:hidden flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-[color-mix(in_srgb,var(--df-text-muted)_10%,transparent)]"
@@ -376,14 +409,33 @@ export default function Header({
       <div
         className="flex-1 min-w-0 h-full flex items-center justify-center gap-2 px-2"
         data-tauri-drag-region
-        onDoubleClick={handleToggleMaximizeWindow}
       >
         <div
           className="flex items-center gap-2 min-w-0 pointer-events-none"
           style={{ color: "var(--df-text-muted)" }}
         >
-          <DragonflyLogo className="h-4 w-4 shrink-0" />
-          <span className="text-xs font-medium truncate">{appTitle}</span>
+          {activeTab ? (
+            activeTab.type === "SSH" && activeConnection ? (
+              <>
+                {activeConnection.icon && <span className="text-sm shrink-0">{SYSTEM_ICONS[activeConnection.icon].icon({ className: "text-sm shrink-0" })}</span>}
+                <span className="text-xs font-medium truncate">
+                  {activeConnection.name} — {activeConnection.username}@{activeConnection.host}:{activeConnection.port}
+                </span>
+              </>
+            ) : activeTab.type === "SSH" ? (
+              <>
+                <BiServer className="text-sm shrink-0" />
+                <span className="text-xs font-medium truncate">{activeTab.name}</span>
+              </>
+            ) : (
+              <>
+                <MdTerminal className="text-sm shrink-0" />
+                <span className="text-xs font-medium truncate">{activeTab.name}</span>
+              </>
+            )
+          ) : (
+            <span className="text-xs font-medium truncate">Dragonfly</span>
+          )}
         </div>
       </div>
 
@@ -426,6 +478,21 @@ export default function Header({
         </button>
       </div>
       <ImportDialog open={showImportDialog} onClose={() => setShowImportDialog(false)} />
+
+      <AlertDialog open={showCloseConfirm} onOpenChange={setShowCloseConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("dialog.confirmClose")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("dialog.confirmCloseDesc")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleConfirmClose}>
+              {t("dialog.confirmCloseAction")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </header>
   );
 }

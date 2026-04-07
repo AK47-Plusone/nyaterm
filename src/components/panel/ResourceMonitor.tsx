@@ -2,14 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   MdComputer,
-  MdMemory,
   MdMonitorHeart,
-  MdSpeed,
   MdStorage,
   MdSwapVert,
   MdVisibility,
   MdVisibilityOff,
+  MdOutlineLocalFireDepartment
 } from "react-icons/md";
+import { FaMemory } from "react-icons/fa6";
+import { LuCpu } from "react-icons/lu";
 import PanelHeader from "@/components/layout/PanelHeader";
 import { useApp } from "@/context/AppContext";
 import { invoke } from "@/lib/invoke";
@@ -211,7 +212,7 @@ export default function ResourceMonitor({ activeSessionId }: ResourceMonitorProp
             </SectionCard>
 
             {/* System Load */}
-            <SectionCard icon={<MdSpeed />} title={t("resourceMonitor.systemLoad")}>
+            <SectionCard icon={<MdOutlineLocalFireDepartment />} title={t("resourceMonitor.systemLoad")}>
               <div className="flex items-center justify-between gap-2">
                 <LoadValue label={t("resourceMonitor.Load1")} value={stats.load.load1} />
                 <LoadValue label={t("resourceMonitor.Load5")} value={stats.load.load5} />
@@ -220,7 +221,7 @@ export default function ResourceMonitor({ activeSessionId }: ResourceMonitorProp
             </SectionCard>
 
             {/* CPU */}
-            <SectionCard icon={<MdSpeed />} title={t("resourceMonitor.cpu")}>
+            <SectionCard icon={<LuCpu />} title={t("resourceMonitor.cpu")}>
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[0.6875rem] font-mono" style={{ color: "var(--df-text-muted)" }}>
@@ -237,7 +238,7 @@ export default function ResourceMonitor({ activeSessionId }: ResourceMonitorProp
             </SectionCard>
 
             {/* Memory */}
-            <SectionCard icon={<MdMemory />} title={t("resourceMonitor.memory")}>
+            <SectionCard icon={<FaMemory />} title={t("resourceMonitor.memory")}>
               <div className="flex items-center gap-3">
                 <div className="flex-1 space-y-1">
                   <div className="text-xs font-mono" style={{ color: "var(--df-text)" }}>

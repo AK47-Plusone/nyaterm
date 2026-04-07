@@ -60,6 +60,18 @@ export function GeneralTab() {
           }
         />
       </SettingRow>
+
+      <SettingRow
+        label={t("settings.confirmOnClose")}
+        desc={t("settings.confirmOnCloseDesc")}
+      >
+        <SettingSwitch
+          checked={appSettings.general.confirm_on_close}
+          onChange={(v) =>
+            updateAppSettings({ general: { ...appSettings.general, confirm_on_close: v } })
+          }
+        />
+      </SettingRow>
     </div>
   );
 }

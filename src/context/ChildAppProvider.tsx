@@ -1,11 +1,11 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { emit } from "@tauri-apps/api/event";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import type { AppSettings, Group, SavedConnection, UiConfig } from "@/types/global";
 import i18n from "../i18n";
-import { AppContext } from "./AppContext";
 import { invoke } from "../lib/invoke";
 import { logger } from "../lib/logger";
 import { DEFAULT_TERMINAL_FONT_SIZE } from "../lib/terminalFontSize";
-import type { AppSettings, Group, SavedConnection, UiConfig } from "@/types/global";
+import { AppContext } from "./AppContext";
 
 const DEFAULT_APP_SETTINGS: AppSettings = {
   general: {
@@ -13,6 +13,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     default_local_shell: navigator.userAgent.includes("Win") ? "powershell.exe" : "bash",
     minimize_to_tray: false,
     boss_key: null,
+    confirm_on_close: true,
   },
   appearance: {
     theme: "github-dark",
@@ -64,6 +65,16 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     word_separators: " ()[]{}\"':=,;|&<>",
     default_encoding: "UTF-8",
   },
+  transfer: {
+    download_threads: 3,
+    upload_threads: 3,
+    duplicate_strategy: "overwrite",
+    preserve_timestamps: true,
+    resume_broken_transfer: true,
+    default_file_permissions: "644",
+    max_transfer_retries: 2,
+    transfer_buffer_size: 32,
+  },
   ui: {
     open_tabs: [],
     left_width: 256,
@@ -77,8 +88,9 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     show_remote_stats: false,
     remote_stats_interval: 3,
     saved_connections_sort_mode: "default",
+    transfer_height: 180,
     activity_bar_layout: {
-      left_top: ["fileExplorer", "fileTransfer", "securityAuth"],
+      left_top: ["fileExplorer", "network", "securityAuth"],
       left_bottom: ["settings"],
       right_top: ["savedConnections", "activeSessions", "commandHistory", "resourceMonitor"],
       right_bottom: ["quickCmdBar", "lock"],
@@ -129,7 +141,7 @@ export function ChildAppProvider({ children }: { children: ReactNode }) {
             invoke("save_app_settings", { settings: next }).catch((e) =>
               logger.error("Failed to save app settings", e),
             );
-            emit("settings-changed", next).catch(() => { });
+            emit("settings-changed", next).catch(() => {});
           }, 500);
         }
         return next;
@@ -148,8 +160,8 @@ export function ChildAppProvider({ children }: { children: ReactNode }) {
     [updateAppSettings],
   );
 
-  const noop = useCallback(() => { }, []);
-  const noopAsync = useCallback(async () => { }, []);
+  const noop = useCallback(() => {}, []);
+  const noopAsync = useCallback(async () => {}, []);
 
   return (
     <AppContext.Provider

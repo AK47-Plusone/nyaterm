@@ -37,7 +37,7 @@ impl Default for ActivityBarLayout {
 fn default_left_top() -> Vec<String> {
     vec![
         "fileExplorer".to_string(),
-        "fileTransfer".to_string(),
+        "network".to_string(),
         "securityAuth".to_string(),
     ]
 }

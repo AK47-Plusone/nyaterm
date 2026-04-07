@@ -3,12 +3,12 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useTranslation } from "react-i18next";
 import { BiServer } from "react-icons/bi";
 import { FaRegFolder } from "react-icons/fa";
-import { IoSwapVerticalOutline } from "react-icons/io5";
 import { LuKeyRound } from "react-icons/lu";
 import {
   MdBolt,
   MdClose,
   MdHistory,
+  MdLan,
   MdLink,
   MdLock,
   MdOutlineMonitorHeart,
@@ -26,6 +26,7 @@ import ActiveSessions from "./components/panel/ActiveSessions";
 import CommandHistory from "./components/panel/CommandHistory";
 import FileExplorer from "./components/panel/FileExplorer";
 import FileTransfer from "./components/panel/FileTransfer";
+import NetworkPanel from "./components/panel/NetworkPanel";
 import SecurityAuthPanel from "./components/panel/SecurityAuthPanel";
 import ResourceMonitor from "./components/panel/ResourceMonitor";
 import SavedConnections from "./components/panel/SavedConnections";
@@ -81,6 +82,7 @@ function App() {
     updateUi,
     updateAppSettings,
     appSettings,
+    savedConnections,
     isLocked,
     setIsLocked,
     settingsLoaded,
@@ -429,7 +431,7 @@ function App() {
   const itemRegistry = useMemo<Record<string, { icon: ReactNode; tooltip: string }>>(
     () => ({
       fileExplorer: { icon: <FaRegFolder />, tooltip: t("panel.fileExplorer") },
-      fileTransfer: { icon: <IoSwapVerticalOutline />, tooltip: t("panel.fileTransfer") },
+      network: { icon: <MdLan />, tooltip: t("panel.network") },
       securityAuth: { icon: <LuKeyRound />, tooltip: t("securityAuth.title") },
       settings: { icon: <MdSettings />, tooltip: t("settings.title") },
       savedConnections: { icon: <BiServer />, tooltip: t("panel.savedConnections") },
@@ -545,12 +547,34 @@ function App() {
 
   const activeSessionId = activeTab?.connecting ? null : (activeTab?.sessionId ?? null);
 
+  const handleTransferResize = useCallback(
+    (delta: number) => {
+      updateUi((prev) => ({
+        transfer_height: Math.max(60, Math.min(400, (prev.transfer_height || 180) - delta)),
+      }));
+    },
+    [updateUi],
+  );
+
   function renderPanelContent(id: string | null) {
     switch (id) {
       case "fileExplorer":
-        return <FileExplorer activeSessionId={activeSessionId} />;
-      case "fileTransfer":
-        return <FileTransfer activeSessionId={activeSessionId} />;
+        return (
+          <div className="h-full flex flex-col overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <FileExplorer activeSessionId={activeSessionId} />
+            </div>
+            <ResizeHandle direction="vertical" onResize={handleTransferResize} />
+            <div
+              style={{ height: uiConfig.transfer_height || 180 }}
+              className="shrink-0 overflow-hidden"
+            >
+              <FileTransfer activeSessionId={activeSessionId} />
+            </div>
+          </div>
+        );
+      case "network":
+        return <NetworkPanel />;
       case "securityAuth":
         return <SecurityAuthPanel />;
       case "savedConnections":
@@ -583,6 +607,8 @@ function App() {
           onToggleLeft={() => setMobileLeftOpen(!mobileLeftOpen)}
           onToggleRight={() => setMobileRightOpen(!mobileRightOpen)}
           onAbout={() => setShowAbout(true)}
+          activeTab={activeTab}
+          savedConnections={savedConnections}
         />
 
         {/* Main Content */}

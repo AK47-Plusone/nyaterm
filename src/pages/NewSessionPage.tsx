@@ -12,11 +12,23 @@ import { SerialForm } from "@/components/sessions/SerialForm";
 import { SshForm } from "@/components/sessions/SshForm";
 import { TelnetForm } from "@/components/sessions/TelnetForm";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import type { Group, SavedConnection } from "@/types/global";
+import type { Group, ProxyConfig, SavedConnection } from "@/types/global";
 
 export default function NewSessionPage() {
   const { t } = useTranslation();
@@ -45,6 +57,10 @@ export default function NewSessionPage() {
   const [newGroupName, setNewGroupName] = useState("");
   const [newGroupParentId, setNewGroupParentId] = useState("");
   const [currentTab, setCurrentTab] = useState("ssh");
+
+  // Proxy
+  const [proxyId, setProxyId] = useState("");
+  const [proxies, setProxies] = useState<ProxyConfig[]>([]);
 
   // Serial Settings States
   const [serialPortName, setSerialPortName] = useState("COM1");
@@ -78,6 +94,9 @@ export default function NewSessionPage() {
     invoke<Group[]>("get_groups")
       .then(setGroups)
       .catch(() => {});
+    invoke<ProxyConfig[]>("get_proxies")
+      .then(setProxies)
+      .catch(() => {});
 
     if (editId) {
       invoke<SavedConnection[]>("get_saved_connections")
@@ -95,6 +114,7 @@ export default function NewSessionPage() {
             setPasswordId(found.password_id || "");
             setKeyId(found.key_id || "");
             setIconKey(found.icon || "");
+            setProxyId(found.proxy_id || "");
           }
         })
         .catch(() => {});
@@ -113,6 +133,7 @@ export default function NewSessionPage() {
     setPasswordId("");
     setKeyId("");
     setIconKey("");
+    setProxyId("");
     setShowIconPicker(false);
     setError("");
     setConnecting(false);
@@ -165,6 +186,8 @@ export default function NewSessionPage() {
         password_id: authType === "password" && passwordId ? passwordId : undefined,
         key_id: authType === "key" && keyId ? keyId : undefined,
         icon: iconKey || undefined,
+        proxy_id: proxyId || undefined,
+        network: initialData?.network ?? {},
       };
 
       const savedId = await invoke<string>("save_connection", { connection });
@@ -449,7 +472,7 @@ export default function NewSessionPage() {
             />
           </TabsContent>
 
-          <div className="space-y-4 mt-8">
+          <div className="space-y-4 mt-6">
             {/* Description */}
             <div>
               <Label className="text-[0.6875rem] text-muted-foreground">
@@ -463,6 +486,40 @@ export default function NewSessionPage() {
                 onChange={(e) => setDescription(e.target.value)}
               />
             </div>
+
+            {currentTab === "ssh" && (
+              <div className="border-t pt-4">
+                <Collapsible>
+                  <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:bg-accent [&[data-state=open]>svg]:rotate-180">
+                    {t("dialog.advancedConfig")}
+                    <MdExpandMore className="text-base text-muted-foreground transition-transform duration-200" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-2 space-y-3">
+                    <div className="w-72 max-w-full">
+                      <Label className="text-[0.6875rem] text-muted-foreground">
+                        {t("dialog.proxySelect")}
+                      </Label>
+                      <Select
+                        value={proxyId || "__none__"}
+                        onValueChange={(value) => setProxyId(value === "__none__" ? "" : value)}
+                      >
+                        <SelectTrigger className="mt-1 h-8 text-xs">
+                          <SelectValue placeholder={t("dialog.noProxy")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">{t("dialog.noProxy")}</SelectItem>
+                          {proxies.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.name} ({p.protocol.toUpperCase()} {p.host}:{p.port})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              </div>
+            )}
 
             {/* Messages */}
             {error && (

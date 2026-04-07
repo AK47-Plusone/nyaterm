@@ -81,6 +81,9 @@ export interface SavedConnection {
   sort_order?: number;
   /** Icon key referencing a named icon from QUICK_ICONS (e.g. "docker", "ubuntu"). */
   icon?: string;
+  /** References a standalone proxy config by id. */
+  proxy_id?: string;
+  network?: ConnectionNetworkSettings;
 }
 
 /** Saved tab state for startup restoration. */
@@ -90,10 +93,7 @@ export interface RestorableTab {
   connection_id?: string;
 }
 
-export type LeftPanelId =
-  | "fileExplorer"
-  | "fileTransfer"
-  | "securityAuth";
+export type LeftPanelId = "fileExplorer" | "fileTransfer" | "securityAuth";
 
 export type RightPanelId =
   | "savedConnections"
@@ -128,6 +128,7 @@ export interface UiConfig {
   show_remote_stats: boolean;
   remote_stats_interval: number;
   saved_connections_sort_mode?: string;
+  transfer_height: number;
   activity_bar_layout: ActivityBarLayout;
 }
 
@@ -220,6 +221,7 @@ export interface GeneralSettings {
   default_local_shell: string;
   minimize_to_tray: boolean;
   boss_key: string | null;
+  confirm_on_close: boolean;
 }
 
 export interface AppearanceSettings {
@@ -239,6 +241,21 @@ export interface ProxySettings {
   protocol: string;
   host: string;
   port: number;
+}
+
+export interface ProxyConfig {
+  id: string;
+  name: string;
+  protocol: string;
+  host: string;
+  port: number;
+  username?: string;
+  password?: string;
+  password_id?: string;
+}
+
+export interface ConnectionNetworkSettings {
+  proxy?: ProxySettings;
 }
 
 export interface SearchEngine {
@@ -307,6 +324,30 @@ export interface TerminalSettings {
   action_links_matchers: ActionLinksMatcherSettings;
 }
 
+export interface TransferSettings {
+  download_threads: number;
+  upload_threads: number;
+  duplicate_strategy: string;
+  preserve_timestamps: boolean;
+  resume_broken_transfer: boolean;
+  default_file_permissions: string;
+  max_transfer_retries: number;
+  transfer_buffer_size: number;
+}
+
+export interface TunnelConfig {
+  id: string;
+  name: string;
+  tunnel_type: string;
+  connection_id?: string;
+  listen_port: number;
+  target_host: string;
+  target_port: number;
+  is_open: boolean;
+  auto_open: boolean;
+  bind_localhost: boolean;
+}
+
 export interface InteractionSettings {
   copy_on_select: boolean;
   right_click_paste: boolean;
@@ -323,6 +364,7 @@ export interface AppSettings {
   security: SecuritySettings;
   terminal: TerminalSettings;
   interaction: InteractionSettings;
+  transfer: TransferSettings;
   ui: UiConfig;
 }
 

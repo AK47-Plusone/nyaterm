@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MdAdd, MdDelete, MdEdit } from "react-icons/md";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,68 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { SavedPassword } from "@/types/global";
 
+interface PasswordEditorProps {
+  editHasPassword: boolean;
+  editName: string;
+  editPassword: string;
+  isEditing: boolean;
+  passwordLoading: boolean;
+  onCancel: () => void;
+  onNameChange: (value: string) => void;
+  onPasswordChange: (value: string) => void;
+  onSave: () => void;
+  saveDisabled: boolean;
+  t: ReturnType<typeof useTranslation>["t"];
+}
+
+function PasswordEditor({
+  editHasPassword,
+  editName,
+  editPassword,
+  isEditing,
+  passwordLoading,
+  onCancel,
+  onNameChange,
+  onPasswordChange,
+  onSave,
+  saveDisabled,
+  t,
+}: PasswordEditorProps) {
+  return (
+    <div className="space-y-2.5 border-b bg-accent/30 p-3">
+      <Input
+        placeholder={t("passwordManager.namePlaceholder")}
+        className="h-8 text-xs"
+        value={editName}
+        onChange={(event) => onNameChange(event.target.value)}
+        autoFocus
+      />
+      <Input
+        type="password"
+        placeholder={
+          passwordLoading
+            ? t("common.loading")
+            : isEditing && editHasPassword
+              ? t("passwordManager.passwordUnchanged")
+              : t("passwordManager.passwordPlaceholder")
+        }
+        className="h-8 text-xs"
+        value={editPassword}
+        onChange={(event) => onPasswordChange(event.target.value)}
+        disabled={passwordLoading}
+      />
+      <div className="flex justify-end gap-1.5 pt-0.5">
+        <Button variant="outline" size="sm" className="h-7 px-3 text-xs" onClick={onCancel}>
+          {t("common.cancel")}
+        </Button>
+        <Button size="sm" className="h-7 px-3 text-xs" onClick={onSave} disabled={saveDisabled}>
+          {t("common.save")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function PasswordManagementTab() {
   const { t } = useTranslation();
   const [passwords, setPasswords] = useState<SavedPassword[]>([]);
@@ -22,14 +84,18 @@ export function PasswordManagementTab() {
   const [editName, setEditName] = useState("");
   const [editPassword, setEditPassword] = useState("");
   const [editHasPassword, setEditHasPassword] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
   const [isNew, setIsNew] = useState(false);
   const [deletingEntry, setDeletingEntry] = useState<SavedPassword | null>(null);
+  const editRequestRef = useRef(0);
 
   const loadPasswords = useCallback(async () => {
     try {
       const result = await invoke<SavedPassword[]>("get_saved_passwords");
       setPasswords(result);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   useEffect(() => {
@@ -37,10 +103,12 @@ export function PasswordManagementTab() {
   }, [loadPasswords]);
 
   const resetEdit = () => {
+    editRequestRef.current += 1;
     setEditingId(null);
     setEditName("");
     setEditPassword("");
     setEditHasPassword(false);
+    setPasswordLoading(false);
     setIsNew(false);
   };
 
@@ -50,12 +118,27 @@ export function PasswordManagementTab() {
     setIsNew(true);
   };
 
-  const handleEdit = (entry: SavedPassword) => {
+  const handleEdit = async (entry: SavedPassword) => {
+    const requestId = ++editRequestRef.current;
     setEditingId(entry.id);
     setEditName(entry.name);
     setEditPassword("");
     setEditHasPassword(entry.has_password || false);
+    setPasswordLoading(true);
     setIsNew(false);
+
+    try {
+      const password = await invoke<string | null>("get_saved_password_value", { id: entry.id });
+      if (editRequestRef.current !== requestId) return;
+      setEditPassword(password ?? "");
+    } catch {
+      if (editRequestRef.current !== requestId) return;
+      setEditPassword("");
+    } finally {
+      if (editRequestRef.current === requestId) {
+        setPasswordLoading(false);
+      }
+    }
   };
 
   const handleSave = async () => {
@@ -71,7 +154,9 @@ export function PasswordManagementTab() {
       });
       resetEdit();
       await loadPasswords();
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   };
 
   const handleDeleteConfirm = async () => {
@@ -79,45 +164,11 @@ export function PasswordManagementTab() {
     try {
       await invoke("delete_password", { id: deletingEntry.id });
       await loadPasswords();
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     setDeletingEntry(null);
   };
-
-  const PasswordForm = ({ isEditing }: { isEditing: boolean }) => (
-    <div className="p-3 border-b space-y-2.5 bg-accent/30">
-      <Input
-        placeholder={t("passwordManager.namePlaceholder")}
-        className="text-xs h-8"
-        value={editName}
-        onChange={(e) => setEditName(e.target.value)}
-        autoFocus
-      />
-      <Input
-        type="password"
-        placeholder={
-          isEditing && editHasPassword
-            ? t("passwordManager.passwordUnchanged")
-            : t("passwordManager.passwordPlaceholder")
-        }
-        className="text-xs h-8"
-        value={editPassword}
-        onChange={(e) => setEditPassword(e.target.value)}
-      />
-      <div className="flex justify-end gap-1.5 pt-0.5">
-        <Button variant="outline" size="sm" className="h-7 px-3 text-xs" onClick={resetEdit}>
-          {t("common.cancel")}
-        </Button>
-        <Button
-          size="sm"
-          className="h-7 px-3 text-xs"
-          onClick={handleSave}
-          disabled={!editName.trim() || (!isEditing && !editPassword)}
-        >
-          {t("common.save")}
-        </Button>
-      </div>
-    </div>
-  );
 
   return (
     <div className="space-y-6">
@@ -136,19 +187,47 @@ export function PasswordManagementTab() {
         </div>
 
         <div className="border rounded-md overflow-hidden">
-          {isNew && editingId === "__new__" && <PasswordForm isEditing={false} />}
+          {isNew && editingId === "__new__" && (
+            <PasswordEditor
+              editHasPassword={editHasPassword}
+              editName={editName}
+              editPassword={editPassword}
+              isEditing={false}
+              passwordLoading={passwordLoading}
+              onCancel={resetEdit}
+              onNameChange={setEditName}
+              onPasswordChange={setEditPassword}
+              onSave={handleSave}
+              saveDisabled={passwordLoading || !editName.trim() || !editPassword}
+              t={t}
+            />
+          )}
 
           {passwords.map((entry) => (
             <div key={entry.id}>
               {editingId === entry.id && !isNew ? (
-                <PasswordForm isEditing={true} />
+                <PasswordEditor
+                  editHasPassword={editHasPassword}
+                  editName={editName}
+                  editPassword={editPassword}
+                  isEditing={true}
+                  passwordLoading={passwordLoading}
+                  onCancel={resetEdit}
+                  onNameChange={setEditName}
+                  onPasswordChange={setEditPassword}
+                  onSave={handleSave}
+                  saveDisabled={passwordLoading || !editName.trim()}
+                  t={t}
+                />
               ) : (
                 <div className="flex items-center gap-2 px-3 py-2.5 border-b last:border-0 hover:bg-accent transition-colors">
                   <span className="flex-1 text-xs truncate">{entry.name}</span>
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    onClick={() => handleEdit(entry)}
+                    onClick={() => {
+                      void handleEdit(entry);
+                    }}
                     disabled={editingId !== null}
                   >
                     <MdEdit className="text-base" />
