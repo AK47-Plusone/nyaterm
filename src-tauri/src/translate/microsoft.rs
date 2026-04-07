@@ -27,7 +27,10 @@ async fn get_auth_token() -> AppResult<String> {
     let client = reqwest::Client::new();
     let resp = client
         .get("https://edge.microsoft.com/translate/auth")
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        )
         .send()
         .await
         .map_err(|e| AppError::Translation(format!("Microsoft auth failed: {e}")))?;

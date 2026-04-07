@@ -112,7 +112,10 @@ pub async fn translate(text: &str, target_lang: &str) -> AppResult<TranslateResu
     let resp = client
         .get("https://translate.googleapis.com/translate_a/single")
         .query(&params)
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        )
         .send()
         .await
         .map_err(|e| AppError::Translation(format!("Google request failed: {e}")))?;
@@ -138,7 +141,9 @@ pub async fn translate(text: &str, target_lang: &str) -> AppResult<TranslateResu
         .to_string();
 
     if translated.is_empty() {
-        return Err(AppError::Translation("Google returned empty translation".into()));
+        return Err(AppError::Translation(
+            "Google returned empty translation".into(),
+        ));
     }
 
     Ok(TranslateResult {

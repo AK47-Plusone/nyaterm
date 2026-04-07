@@ -59,9 +59,7 @@ pub async fn translate(
 
     if let Some(code) = &result.error_code {
         let msg = result.error_msg.as_deref().unwrap_or("Unknown error");
-        return Err(AppError::Translation(format!(
-            "Baidu error {code}: {msg}"
-        )));
+        return Err(AppError::Translation(format!("Baidu error {code}: {msg}")));
     }
 
     let trans = result

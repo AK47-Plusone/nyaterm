@@ -62,9 +62,8 @@ pub async fn translate(
     let signed_headers =
         "host;x-acs-action;x-acs-content-sha256;x-acs-date;x-acs-signature-nonce;x-acs-version";
 
-    let canonical_request = format!(
-        "POST\n/\n\n{headers_to_sign}\n\n{signed_headers}\n{body_hash}"
-    );
+    let canonical_request =
+        format!("POST\n/\n\n{headers_to_sign}\n\n{signed_headers}\n{body_hash}");
 
     let mut req_hasher = Sha256::new();
     req_hasher.update(canonical_request.as_bytes());
