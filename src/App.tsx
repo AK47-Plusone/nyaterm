@@ -748,7 +748,11 @@ function App() {
                 className={`
                   fixed inset-y-0 left-10 z-40 flex flex-col shadow-xl transition-transform duration-200
                   lg:relative lg:left-0 lg:translate-x-0 lg:z-0 lg:shadow-none
-                  ${mobileLeftOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
+                  ${
+                    mobileLeftOpen
+                      ? "translate-x-0"
+                      : "-translate-x-[calc(100%+2.5rem)] lg:translate-x-0"
+                  }
                 `}
               >
                 <div
@@ -887,7 +891,11 @@ function App() {
                 className={`
                   fixed inset-y-0 right-10 z-50 flex flex-col shadow-xl transition-transform duration-200 border-l
                   md:relative md:right-0 md:translate-x-0 md:z-0 md:shadow-none
-                  ${mobileRightOpen ? "translate-x-0" : "translate-x-full md:translate-x-0"}
+                  ${
+                    mobileRightOpen
+                      ? "translate-x-0"
+                      : "translate-x-[calc(100%+2.5rem)] md:translate-x-0"
+                  }
                 `}
               >
                 <div
