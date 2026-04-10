@@ -16,7 +16,6 @@ pub struct TranslateResult {
     pub detected_language: String,
     pub provider: String,
 }
-
 pub async fn translate(
     provider: &str,
     text: &str,
