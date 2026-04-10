@@ -13,7 +13,7 @@ import {
   MdVisibilityOff,
 } from "react-icons/md";
 import { toast } from "sonner";
-import { OtpCodePanel } from "@/components/panel/OtpCodePanel";
+import { OtpCodePanel } from "@/components/panel/security-auth/OtpCodePanel";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {

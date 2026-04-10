@@ -48,16 +48,16 @@ import { useApp } from "@/context/AppContext";
 import { formatSize } from "@/lib/utils";
 import { openAutoUpload } from "@/lib/windowManager";
 import type { FileEntry, FileExplorerProps } from "@/types/global";
-import DeleteDialog, { type DeleteDialogData } from "../dialog/file-explorer/DeleteDialog";
-import MoveDialog, { type MoveDialogData } from "../dialog/file-explorer/MoveDialog";
-import NewItemDialog, { type NewItemDialogData } from "../dialog/file-explorer/NewItemDialog";
+import DeleteDialog, { type DeleteDialogData } from "@/components/dialog/file-explorer/DeleteDialog";
+import MoveDialog, { type MoveDialogData } from "@/components/dialog/file-explorer/MoveDialog";
+import NewItemDialog, { type NewItemDialogData } from "@/components/dialog/file-explorer/NewItemDialog";
 import NewSymlinkDialog, {
   type NewSymlinkDialogData,
-} from "../dialog/file-explorer/NewSymlinkDialog";
+} from "@/components/dialog/file-explorer/NewSymlinkDialog";
 import PropertiesDialog, {
   type PropertiesDialogData,
-} from "../dialog/file-explorer/PropertiesDialog";
-import RenameDialog, { type RenameDialogData } from "../dialog/file-explorer/RenameDialog";
+} from "@/components/dialog/file-explorer/PropertiesDialog";
+import RenameDialog, { type RenameDialogData } from "@/components/dialog/file-explorer/RenameDialog";
 import { FileListItem } from "./FileListItem";
 
 interface TransferEventPayload {

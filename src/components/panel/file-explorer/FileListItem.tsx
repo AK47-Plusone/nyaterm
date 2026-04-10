@@ -29,7 +29,7 @@ import {
   ContextMenuSubContent,
   ContextMenuSubTrigger,
   ContextMenuTrigger,
-} from "../ui/context-menu";
+} from "../../ui/context-menu";
 
 interface FileListItemProps {
   entry: FileEntry;

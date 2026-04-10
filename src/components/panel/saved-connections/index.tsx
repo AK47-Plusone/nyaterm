@@ -20,25 +20,25 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import type { Group, SavedConnection } from "@/types/global";
-import { useApp } from "../../context/AppContext";
-import { invoke } from "../../lib/invoke";
-import { logger } from "../../lib/logger";
-import ClearAllDialog from "../dialog/connections/ClearAllDialog";
-import DeleteConnectionDialog from "../dialog/connections/DeleteConnectionDialog";
-import DeleteFolderDialog from "../dialog/connections/DeleteFolderDialog";
-import FolderDialog from "../dialog/connections/FolderDialog";
-import ImportDialog from "../dialog/connections/ImportDialog";
-import RenameConnectionDialog from "../dialog/connections/RenameConnectionDialog";
-import ConnectionItem from "./saved-connections/ConnectionItem";
-import type { SavedConnectionsContextValue } from "./saved-connections/context";
+import { useApp } from "@/context/AppContext";
+import { invoke } from "@/lib/invoke";
+import { logger } from "@/lib/logger";
+import ClearAllDialog from "@/components/dialog/connections/ClearAllDialog";
+import DeleteConnectionDialog from "@/components/dialog/connections/DeleteConnectionDialog";
+import DeleteFolderDialog from "@/components/dialog/connections/DeleteFolderDialog";
+import FolderDialog from "@/components/dialog/connections/FolderDialog";
+import ImportDialog from "@/components/dialog/connections/ImportDialog";
+import RenameConnectionDialog from "@/components/dialog/connections/RenameConnectionDialog";
+import ConnectionItem from "./ConnectionItem";
+import type { SavedConnectionsContextValue } from "./context";
 import {
   type DragTarget,
   type GroupNode,
   naturalCompare,
   SavedConnectionsContext,
   type SortMode,
-} from "./saved-connections/context";
-import GroupNodeItem from "./saved-connections/GroupNodeItem";
+} from "./context";
+import GroupNodeItem from "./GroupNodeItem";
 
 interface SavedConnectionsProps {
   onNewConnection: (parentGroupId?: string) => void;

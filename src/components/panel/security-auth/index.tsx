@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import PanelHeader from "@/components/layout/PanelHeader";
-import { KeyManagementTab } from "@/components/settings/KeyManagementTab";
-import { OtpManagementTab } from "@/components/settings/OtpManagementTab";
-import { PasswordManagementTab } from "@/components/settings/PasswordManagementTab";
+import { KeyManagementTab } from "@/components/panel/security-auth/KeyManagementTab";
+import { OtpManagementTab } from "@/components/panel/security-auth/OtpManagementTab";
+import { PasswordManagementTab } from "@/components/panel/security-auth/PasswordManagementTab";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type SecurityAuthTab = "keys" | "passwords" | "otp";

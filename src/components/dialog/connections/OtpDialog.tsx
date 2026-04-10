@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { OtpCodePanel } from "@/components/panel/OtpCodePanel";
+import { OtpCodePanel } from "@/components/panel/security-auth/OtpCodePanel";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

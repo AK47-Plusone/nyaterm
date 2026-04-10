@@ -14,8 +14,8 @@ import {
 } from "react-icons/md";
 import PanelHeader from "@/components/layout/PanelHeader";
 import { useApp } from "@/context/AppContext";
-import { type TransferItem, useTransfer } from "../../context/TransferContext";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { type TransferItem, useTransfer } from "../../../context/TransferContext";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip";
 import { openPath } from "@tauri-apps/plugin-opener";
 
 interface FileTransferProps {
