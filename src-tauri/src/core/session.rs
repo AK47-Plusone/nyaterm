@@ -15,6 +15,44 @@ use tokio::sync::{mpsc, Mutex};
 
 pub type SharedCwd = Arc<Mutex<Option<String>>>;
 
+pub(crate) fn normalize_cwd_path(path: &str) -> String {
+    if path.is_empty() || path == "/" || is_windows_drive_root(path) {
+        return path.to_string();
+    }
+
+    let normalized = path.trim_end_matches('/');
+    if normalized.is_empty() {
+        "/".to_string()
+    } else {
+        normalized.to_string()
+    }
+}
+
+pub(crate) async fn update_cwd_if_changed(cwd: &SharedCwd, next_path: &str) -> Option<String> {
+    let normalized = normalize_cwd_path(next_path);
+    if normalized.is_empty() {
+        return None;
+    }
+
+    let mut cached = cwd.lock().await;
+    let unchanged = cached
+        .as_deref()
+        .is_some_and(|current| normalize_cwd_path(current) == normalized);
+
+    if unchanged {
+        return None;
+    }
+
+    *cached = Some(normalized.clone());
+    Some(normalized)
+}
+
+fn is_windows_drive_root(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    matches!(bytes, [drive, b':', b'/'] if drive.is_ascii_alphabetic())
+        || matches!(bytes, [b'/', drive, b':', b'/'] if drive.is_ascii_alphabetic())
+}
+
 /// Distinguishes SSH vs local PTY sessions for UI and routing.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SessionType {
@@ -171,5 +209,18 @@ impl SessionManager {
     pub async fn fuzzy_search(&self, pattern: &str, limit: usize) -> Vec<FuzzyResult> {
         let store = self.history_store.lock().await;
         store.search(pattern, limit)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_cwd_path;
+
+    #[test]
+    fn normalizes_trailing_slashes_without_breaking_roots() {
+        assert_eq!(normalize_cwd_path("/var/log/"), "/var/log");
+        assert_eq!(normalize_cwd_path("/"), "/");
+        assert_eq!(normalize_cwd_path("C:/"), "C:/");
+        assert_eq!(normalize_cwd_path("/C:/"), "/C:/");
     }
 }

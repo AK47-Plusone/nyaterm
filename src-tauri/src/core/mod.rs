@@ -15,6 +15,7 @@ pub(crate) mod watcher;
 
 pub use pty::create_local_session;
 pub use recording::RecordingManager;
+pub(crate) use session::update_cwd_if_changed;
 pub use session::{
     SessionCommand, SessionHandle, SessionInfo, SessionManager, SessionType, SharedCwd,
 };

@@ -6,6 +6,7 @@ use super::recording::RecordingManager;
 use super::session::{
     SessionCommand, SessionHandle, SessionInfo, SessionManager, SessionType, SharedCwd,
 };
+use super::update_cwd_if_changed;
 use crate::error::AppResult;
 use crate::core::ssh::osc::{self, OscStripper, ShellKind};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
@@ -200,13 +201,13 @@ fn pty_session_thread(
                     }
 
                     for path in &result.cwd_paths {
-                        let p = path.clone();
                         let cwd_ev = cwd_event.clone();
                         let app_ref = app_read.clone();
-                        rt_for_reader.block_on(async {
-                            *cwd.lock().await = Some(p);
-                        });
-                        let _ = app_ref.emit(&cwd_ev, path);
+                        let next_cwd = rt_for_reader
+                            .block_on(async { update_cwd_if_changed(&cwd, path).await });
+                        if let Some(next_cwd) = next_cwd {
+                            let _ = app_ref.emit(&cwd_ev, &next_cwd);
+                        }
                     }
 
                     if result.visible.is_empty() {

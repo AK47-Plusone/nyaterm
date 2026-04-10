@@ -1,7 +1,9 @@
 use super::client::{SshHandle, SshHandler};
 use crate::error::{AppError, AppResult};
 use crate::core::ssh::osc::{self, OscStripper, ShellKind};
-use crate::core::{RecordingManager, SessionCommand, SessionManager, SharedCwd};
+use crate::core::{
+    update_cwd_if_changed, RecordingManager, SessionCommand, SessionManager, SharedCwd,
+};
 use russh::{client, ChannelMsg};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
@@ -157,8 +159,7 @@ pub(super) async fn ssh_io_loop(
     };
     let mut pending_script = injection_script;
 
-    let inject_deadline =
-        tokio::time::sleep(std::time::Duration::from_secs(INJECT_TIMEOUT_SECS));
+    let inject_deadline = tokio::time::sleep(std::time::Duration::from_secs(INJECT_TIMEOUT_SECS));
     tokio::pin!(inject_deadline);
 
     loop {
@@ -217,8 +218,9 @@ pub(super) async fn ssh_io_loop(
                                 // Discard visible text (injection echo) but
                                 // still honour CWD changes and ready marker.
                                 for path in &result.cwd_paths {
-                                    *cwd.lock().await = Some(path.clone());
-                                    let _ = app.emit(&cwd_event, path);
+                                    if let Some(next_cwd) = update_cwd_if_changed(&cwd, path).await {
+                                        let _ = app.emit(&cwd_event, &next_cwd);
+                                    }
                                 }
                                 if result.ready {
                                     phase = IoPhase::Normal;
@@ -301,8 +303,9 @@ async fn emit_output(
     buffer: &mut Vec<String>,
 ) {
     for path in &result.cwd_paths {
-        *cwd.lock().await = Some(path.clone());
-        let _ = app.emit(cwd_event, path);
+        if let Some(next_cwd) = update_cwd_if_changed(cwd, path).await {
+            let _ = app.emit(cwd_event, &next_cwd);
+        }
     }
 
     if result.visible.is_empty() {

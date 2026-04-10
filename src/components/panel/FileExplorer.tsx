@@ -73,6 +73,12 @@ function getParentPath(path: string) {
   return index <= 0 ? "/" : normalized.slice(0, index);
 }
 
+function normalizeDirectoryPath(path: string) {
+  if (!path || path === "/") return path;
+  const normalized = path.replace(/\/+$/, "");
+  return normalized || "/";
+}
+
 function ToolbarDivider() {
   return (
     <span
@@ -189,25 +195,26 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
   const loadDirectory = useCallback(
     async (path: string) => {
       if (!activeSessionId) return;
+      const normalizedPath = normalizeDirectoryPath(path);
       setDirectoryLoading(true);
       setError(null);
 
       try {
         const entries = await invoke<FileEntry[]>("list_remote_dir", {
           sessionId: activeSessionId,
-          path,
+          path: normalizedPath,
         });
         entries.sort((a, b) => {
           if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
           return a.name.localeCompare(b.name);
         });
         setFiles(entries);
-        setCurrentPath(path);
+        setCurrentPath(normalizedPath);
 
         const cached = sessionCacheRef.current.get(activeSessionId);
         sessionCacheRef.current.set(activeSessionId, {
           files: entries,
-          currentPath: path,
+          currentPath: normalizedPath,
           homeDir: cached?.homeDir ?? homeDirRef.current,
         });
       } catch (e) {
@@ -422,19 +429,20 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
     if (!activeSessionId) return;
     try {
       const cwd = await invoke<string>("get_terminal_cwd", { sessionId: activeSessionId });
-      if (cwd && cwd !== currentPath) {
-        loadDirectory(cwd);
+      const normalizedCwd = normalizeDirectoryPath(cwd);
+      if (normalizedCwd && normalizedCwd !== normalizeDirectoryPath(currentPathRef.current)) {
+        loadDirectory(normalizedCwd);
       }
     } catch (e) {
       toast.error(`${t("fileExplorer.syncFailed")}: ${e}`);
     }
-  }, [activeSessionId, currentPath, loadDirectory, t]);
+  }, [activeSessionId, loadDirectory, t]);
 
   useEffect(() => {
     if (!autoSyncCwd || !activeSessionId) return;
     const unlisten = listen<string>(`cwd-changed-${activeSessionId}`, (event) => {
-      const newCwd = event.payload;
-      if (newCwd) {
+      const newCwd = normalizeDirectoryPath(event.payload);
+      if (newCwd && newCwd !== normalizeDirectoryPath(currentPathRef.current)) {
         loadDirectory(newCwd);
       }
     });
