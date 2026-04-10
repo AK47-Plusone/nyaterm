@@ -1,7 +1,10 @@
 pub mod connection;
+pub mod importer;
 pub mod proxy;
 pub mod session;
 pub mod settings;
 pub mod sftp;
 pub mod stats;
+pub mod translate;
 pub mod tunnel;
+pub mod watcher;

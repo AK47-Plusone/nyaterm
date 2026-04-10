@@ -1,6 +1,17 @@
 use crate::config;
-use crate::core::error::AppResult;
+use crate::error::AppResult;
 use crate::utils::crypto;
+
+#[tauri::command]
+pub fn get_system_fonts() -> Vec<String> {
+    use font_kit::source::SystemSource;
+    if let Ok(mut families) = SystemSource::new().all_families() {
+        families.sort();
+        families.dedup();
+        return families;
+    }
+    Vec::new()
+}
 
 #[tauri::command]
 pub fn get_app_settings(app: tauri::AppHandle) -> AppResult<config::AppSettings> {

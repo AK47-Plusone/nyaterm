@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
-use crate::core::error::{AppError, AppResult};
+use crate::error::{AppError, AppResult};
 
 #[derive(Clone, Serialize)]
 pub struct FileModifiedPayload {
@@ -23,7 +23,6 @@ lazy_static::lazy_static! {
     static ref ACTIVE_WATCHERS: Arc<Mutex<std::collections::HashMap<String, WatchState>>> = Arc::new(Mutex::new(std::collections::HashMap::new()));
 }
 
-#[tauri::command]
 pub async fn start_file_watch(
     app: AppHandle,
     session_id: String,
@@ -113,7 +112,6 @@ pub async fn start_file_watch(
     Ok(())
 }
 
-#[tauri::command]
 pub async fn stop_file_watch(session_id: String, local_path: String) -> AppResult<()> {
     let watch_key = format!("{}:{}", session_id, local_path);
     let mut watchers = ACTIVE_WATCHERS.lock().unwrap();

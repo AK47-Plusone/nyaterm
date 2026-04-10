@@ -1,7 +1,7 @@
 //! Import sessions from Xshell (.xts), MobaXterm (.mxtsessions), and WindTerm (.sessions) files.
 
 use crate::config::{self, Group, SavedConnection};
-use crate::core::error::{AppError, AppResult};
+use crate::error::{AppError, AppResult};
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::Path;
@@ -330,7 +330,6 @@ fn parse_windterm(path: &str) -> AppResult<Vec<ImportedSession>> {
 
 // ── Tauri Command ───────────────────────────────────────────────────────────
 
-#[tauri::command]
 pub fn import_sessions(app: tauri::AppHandle, file_path: String) -> AppResult<usize> {
     let lower = file_path.to_lowercase();
     let imported = if lower.ends_with(".xts") {

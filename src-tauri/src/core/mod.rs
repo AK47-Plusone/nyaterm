@@ -9,6 +9,7 @@ mod pty;
 mod recording;
 mod session;
 pub mod ssh;
+pub mod stats;
 pub mod translate;
 pub(crate) mod watcher;
 

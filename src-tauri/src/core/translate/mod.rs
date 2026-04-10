@@ -6,7 +6,7 @@ mod microsoft;
 mod youdao;
 
 use crate::config::TranslationSettings;
-use crate::core::error::{AppError, AppResult};
+use crate::error::{AppError, AppResult};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,25 +64,4 @@ pub async fn translate(
         r.provider = provider.to_string();
         r
     })
-}
-
-#[tauri::command]
-pub async fn translate_text(
-    app: tauri::AppHandle,
-    provider: String,
-    text: String,
-    target_language: String,
-) -> AppResult<TranslateResult> {
-    let settings = crate::config::load_app_settings(&app)?;
-    let fallback = if settings.translation.target_language.is_empty() {
-        "zh-CN".to_string()
-    } else {
-        settings.translation.target_language.clone()
-    };
-    let target = if target_language.is_empty() {
-        &fallback
-    } else {
-        &target_language
-    };
-    translate(&provider, &text, target, &settings.translation).await
 }
