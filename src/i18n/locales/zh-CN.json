@@ -59,8 +59,8 @@
     "group": "分组",
     "host": "主机",
     "hostRequired": "主机地址不能为空",
-    "serialPortRequired": "串口名不能为空",
     "icon": "图标",
+    "loadingSerialPorts": "正在加载串口...",
     "localTerminal": "本地终端",
     "manageKeys": "管理密钥...",
     "managePasswords": "管理密码...",
@@ -70,6 +70,7 @@
     "noOtp": "无",
     "noPasswords": "暂无密码",
     "noProxy": "不使用代理",
+    "noSerialPortsFound": "未找到可用串口",
     "none": "无",
     "openLocalShell": "打开本地 Shell 会话",
     "parity": "校验位",
@@ -93,8 +94,7 @@
     "serial": "串口",
     "serialPort": "串口名",
     "serialPortPlaceholder": "例如 COM1 或 /dev/ttyS0",
-    "loadingSerialPorts": "正在加载串口...",
-    "noSerialPortsFound": "未找到可用串口",
+    "serialPortRequired": "串口名不能为空",
     "serialPortUnavailable": "{{port}}（不可用）",
     "serialPortsLoadFailed": "加载串口列表失败",
     "serverPlaceholder": "我的服务器",
@@ -369,12 +369,12 @@
     "noCommandsYet": "暂无命令记录",
     "noSavedConnections": "暂无已保存的连接",
     "quickCommands": "快捷命令",
-    "serialSend": "串口发送",
     "resourceMonitor": "资源监控",
     "resourceMonitorDisabled": "请在设置中启用「显示远程资源统计」以使用此功能",
     "resourceMonitorError": "获取资源统计失败",
     "resourceMonitorNoSession": "连接 SSH 会话以查看资源使用情况",
-    "savedConnections": "已保存的连接"
+    "savedConnections": "已保存的连接",
+    "serialSend": "串口发送"
   },
   "passwordManager": {
     "add": "添加密码",
@@ -385,17 +385,6 @@
     "passwordPlaceholder": "输入密码",
     "passwordUnchanged": "留空保持当前密码不变",
     "title": "密码"
-  },
-  "serialSend": {
-    "title": "串口发送",
-    "text": "文本",
-    "hex": "十六进制",
-    "textPlaceholder": "输入要发送的文本...",
-    "hexPlaceholder": "例如 48 65 6C 6C 6F",
-    "hexError": "无效的十六进制输入，请使用十六进制字符（0-9, A-F），以空格分隔。",
-    "noLineEnding": "无",
-    "unavailable": "串口发送仅适用于串口会话",
-    "unavailableDesc": "切换到串口标签页后即可在这里发送文本或十六进制数据。"
   },
   "quickCommands": {
     "add": "添加",
@@ -510,6 +499,17 @@
     "otp": "双因素",
     "passwords": "密码",
     "title": "安全认证"
+  },
+  "serialSend": {
+    "hex": "十六进制",
+    "hexError": "无效的十六进制输入，请使用十六进制字符（0-9, A-F），以空格分隔。",
+    "hexPlaceholder": "例如 48 65 6C 6C 6F",
+    "noLineEnding": "无",
+    "text": "文本",
+    "textPlaceholder": "输入要发送的文本...",
+    "title": "串口发送",
+    "unavailable": "串口发送仅适用于串口会话",
+    "unavailableDesc": "切换到串口标签页后即可在这里发送文本或十六进制数据。"
   },
   "settings": {
     "actionLinks": "快捷动作",
