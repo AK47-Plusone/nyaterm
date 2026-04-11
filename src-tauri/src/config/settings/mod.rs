@@ -168,6 +168,12 @@ pub fn load_app_settings(app: &AppHandle) -> AppResult<AppSettings> {
         }
     }
 
+    for tab in &mut settings.ui.open_tabs {
+        if tab.normalize() {
+            migrated = true;
+        }
+    }
+
     if migrated {
         let _ = save_app_settings(app, &settings);
     }

@@ -34,6 +34,7 @@ import { useApp } from "../../context/AppContext";
 import { useTheme } from "../../context/ThemeContext";
 import { MOD } from "../../hooks/useGlobalShortcuts";
 import { AVAILABLE_LANGUAGES } from "../../i18n";
+import { getActivePane, getTabDisplayName } from "../../lib/workspaceTabs";
 import {
   DEFAULT_TERMINAL_FONT_SIZE,
   decreaseTerminalFontSize,
@@ -133,9 +134,11 @@ export default function Header({
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const { t, i18n } = useTranslation();
 
-  const activeConnection = activeTab?.connectionId
-    ? savedConnections?.find((c) => c.id === activeTab.connectionId)
+  const activePane = activeTab ? getActivePane(activeTab) : null;
+  const activeConnection = activePane?.connectionId
+    ? savedConnections?.find((c) => c.id === activePane.connectionId)
     : undefined;
+  const activeDisplayName = activeTab ? getTabDisplayName(activeTab) : "Dragonfly";
 
   useEffect(() => {
     let mounted = true;
@@ -414,23 +417,27 @@ export default function Header({
           className="flex items-center gap-2 min-w-0 pointer-events-none"
           style={{ color: "var(--df-text-muted)" }}
         >
-          {activeTab ? (
-            activeTab.type === "SSH" && activeConnection ? (
+          {activeTab && activePane ? (
+            activePane.type === "SSH" && activeConnection && !activeTab.customName ? (
               <>
-                {activeConnection.icon && <span className="text-sm shrink-0">{SYSTEM_ICONS[activeConnection.icon].icon({ className: "text-sm shrink-0" })}</span>}
+                {activeConnection.icon && SYSTEM_ICONS[activeConnection.icon] && (
+                  <span className="text-sm shrink-0">
+                    {SYSTEM_ICONS[activeConnection.icon].icon({ className: "text-sm shrink-0" })}
+                  </span>
+                )}
                 <span className="text-xs font-medium truncate">
                   {activeConnection.name} — {activeConnection.username}@{activeConnection.host}:{activeConnection.port}
                 </span>
               </>
-            ) : activeTab.type === "SSH" ? (
+            ) : activePane.type === "SSH" ? (
               <>
                 <BiServer className="text-sm shrink-0" />
-                <span className="text-xs font-medium truncate">{activeTab.name}</span>
+                <span className="text-xs font-medium truncate">{activeDisplayName}</span>
               </>
             ) : (
               <>
                 <MdTerminal className="text-sm shrink-0" />
-                <span className="text-xs font-medium truncate">{activeTab.name}</span>
+                <span className="text-xs font-medium truncate">{activeDisplayName}</span>
               </>
             )
           ) : (

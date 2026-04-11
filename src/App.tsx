@@ -37,14 +37,32 @@ import SavedConnections from "./components/panel/saved-connections";
 import SecurityAuthPanel from "./components/panel/security-auth";
 import QuickCommands from "./components/terminal/QuickCommands";
 import SerialSendPanel from "./components/terminal/SerialSendPanel";
-import TabBar from "./components/terminal/TabBar";
-import XTerminal from "./components/terminal/XTerminal";
+import TabWindowsWorkspace from "./components/terminal/TabWindowsWorkspace";
 import { useApp } from "./context/AppContext";
 import { TransferProvider } from "./context/TransferContext";
 import { useGlobalShortcuts } from "./hooks/useGlobalShortcuts";
 import { useIdleLock } from "./hooks/useIdleLock";
 import { invoke } from "./lib/invoke";
 import { logger } from "./lib/logger";
+import {
+  collectSessionPanes,
+  findPaneBySessionId,
+  findTabBySessionId,
+  getActivePane,
+  getTabDisplayName,
+} from "./lib/workspaceTabs";
+import {
+  findTerminalWindowLeafById,
+  findTerminalWindowLeafByTabId,
+  insertTabAfterInLeaf,
+  reconcileTerminalWindows,
+  removeTabFromTerminalWindows,
+  reorderTabsInLeaf,
+  setLeafActiveTab,
+  splitTerminalWindowForTab,
+  updateTerminalWindowSplitRatio,
+  type TerminalWindowNode,
+} from "./lib/tabWindows";
 import {
   DEFAULT_TERMINAL_FONT_SIZE,
   decreaseTerminalFontSize,
@@ -60,11 +78,20 @@ import type {
   ActivityBarLayout,
   ActivityBarZone,
   AppSettings,
+  PaneSplitDirection,
   SavedConnection,
+  SessionPane,
+  Tab,
 } from "./types/global";
 
 /** Item IDs that are not regular panels — they have special action on click. */
 const NON_PANEL_IDS = new Set(["settings", "lock", "quickCmdBar", "serialSend", "recording"]);
+
+function canCreateSessionFromPane(
+  pane: Pick<SessionPane, "type" | "connectionId"> | null | undefined,
+): pane is Pick<SessionPane, "type" | "connectionId"> {
+  return !!pane && (pane.type === "Local" || !!pane.connectionId);
+}
 
 /** Determine which visual side (left/right) a given item currently lives on. */
 function getItemSide(id: string, layout: ActivityBarLayout): "left" | "right" | null {
@@ -81,10 +108,15 @@ function App() {
     tabs,
     activeTabId,
     setActiveTabId,
+    setActivePane,
     addTab,
     addPendingTab,
     updateTabSession,
+    updatePaneSession,
+    closePane,
     closeTab,
+    updateSplitRatio,
+    persistTabsNow,
     updateUi,
     updateAppSettings,
     appSettings,
@@ -247,6 +279,9 @@ function App() {
   }, [childWindowCount]);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
+  const activePane = activeTab ? getActivePane(activeTab) : null;
+  const [terminalWindows, setTerminalWindows] = useState<TerminalWindowNode | null>(null);
+  const previousActiveTabIdRef = useRef<string | null>(null);
 
   const handleNewSession = (_parentGroupId?: string) => {
     openNewSession();
@@ -256,20 +291,143 @@ function App() {
     openNewSession(conn.id, autoConnect);
   }, []);
 
-  const handleSessionClick = useCallback(
-    (sessionId: string) => {
-      const tab = tabs.find((t) => t.sessionId === sessionId);
-      if (tab) {
-        setActiveTabId(tab.id);
+  useEffect(() => {
+    setTerminalWindows((current) =>
+      reconcileTerminalWindows(current, tabs, activeTabId, previousActiveTabIdRef.current),
+    );
+    previousActiveTabIdRef.current = activeTabId;
+  }, [activeTabId, tabs]);
+
+  const handleSelectLeafTab = useCallback(
+    (leafId: string, tabId: string) => {
+      setTerminalWindows((current) => (current ? setLeafActiveTab(current, leafId, tabId) : current));
+      setActiveTabId(tabId);
+    },
+    [setActiveTabId],
+  );
+
+  const handleAddTabFromLeaf = useCallback(
+    (leafId: string) => {
+      const leaf = terminalWindows ? findTerminalWindowLeafByTabId(terminalWindows, activeTabId ?? "") : null;
+      if (leaf?.id !== leafId) {
+        const targetLeaf = terminalWindows
+          ? findTerminalWindowLeafById(terminalWindows, leafId)
+          : null;
+        if (targetLeaf?.activeTabId) {
+          handleSelectLeafTab(leafId, targetLeaf.activeTabId);
+        }
+      }
+      handleNewSession();
+    },
+    [activeTabId, handleSelectLeafTab, terminalWindows],
+  );
+
+  const handleReorderTabsInLeaf = useCallback((_: string, fromTabId: string, toIndex: number) => {
+    setTerminalWindows((current) =>
+      current ? reorderTabsInLeaf(current, fromTabId, toIndex) : current,
+    );
+  }, []);
+
+  const handleUpdateWindowSplitRatio = useCallback((splitId: string, ratio: number) => {
+    setTerminalWindows((current) =>
+      current ? updateTerminalWindowSplitRatio(current, splitId, ratio) : current,
+    );
+  }, []);
+
+  const createSessionForPane = useCallback(
+    async (pane: Pick<SessionPane, "type" | "connectionId">) => {
+      switch (pane.type) {
+        case "Local":
+          return invoke<string>("create_local_session", {
+            connectionId: pane.connectionId || null,
+          });
+        case "Telnet":
+          if (!pane.connectionId) throw new Error("Missing Telnet connection id");
+          return invoke<string>("create_telnet_session", { connectionId: pane.connectionId });
+        case "Serial":
+          if (!pane.connectionId) throw new Error("Missing Serial connection id");
+          return invoke<string>("create_serial_session", { connectionId: pane.connectionId });
+        default:
+          if (!pane.connectionId) throw new Error("Missing SSH connection id");
+          return invoke<string>("create_ssh_session", { connectionId: pane.connectionId });
       }
     },
-    [tabs, setActiveTabId],
+    [],
+  );
+
+  const closePaneBackendSession = useCallback(
+    async (pane: Pick<SessionPane, "connecting" | "sessionId">) => {
+      if (pane.connecting) {
+        return true;
+      }
+
+      try {
+        await invoke("close_session", { sessionId: pane.sessionId });
+        return true;
+      } catch (error) {
+        logger.error("Failed to close session", error);
+        return false;
+      }
+    },
+    [],
+  );
+
+  const closeWorkspaceTabSessions = useCallback(
+    async (tab: Tab) => {
+      const results = await Promise.all(
+        collectSessionPanes(tab.root).map((pane) => closePaneBackendSession(pane)),
+      );
+      return results.every(Boolean);
+    },
+    [closePaneBackendSession],
+  );
+
+  const persistWorkspaceNow = useCallback(
+    async (message: string) => {
+      try {
+        await persistTabsNow();
+        return true;
+      } catch (error) {
+        logger.error("Failed to persist workspace tabs", error);
+        toast.error(message);
+        return false;
+      }
+    },
+    [persistTabsNow],
+  );
+
+  const handleCloseWorkspaceTab = useCallback(
+    async (tab: Tab) => {
+      const allClosed = await closeWorkspaceTabSessions(tab);
+      closeTab(tab.id);
+      await persistWorkspaceNow(t("tabCtx.closeFailed"));
+      if (!allClosed) {
+        toast.error(t("tabCtx.closeFailed"));
+      }
+    },
+    [closeTab, closeWorkspaceTabSessions, persistWorkspaceNow, t],
+  );
+
+  const handleSessionClick = useCallback(
+    (sessionId: string) => {
+      const tab = findTabBySessionId(tabs, sessionId);
+      const pane = tab ? findPaneBySessionId(tab, sessionId) : null;
+      if (tab && pane) {
+        setTerminalWindows((current) => {
+          const leaf = current ? findTerminalWindowLeafByTabId(current, tab.id) : null;
+          return current && leaf ? setLeafActiveTab(current, leaf.id, tab.id) : current;
+        });
+        setActiveTabId(tab.id);
+        setActivePane(tab.id, pane.id);
+      }
+    },
+    [tabs, setActivePane, setActiveTabId],
   );
 
   const handleHistoryCommand = useCallback(
     (command: string, execute: boolean = true) => {
-      if (activeTab) {
-        const { sessionId } = activeTab;
+      if (activePane && !activePane.connecting) {
+        const { sessionId } = activePane;
         import("@tauri-apps/api/core").then(({ invoke }) => {
           invoke("write_to_session", {
             sessionId,
@@ -281,17 +439,18 @@ function App() {
         });
       }
     },
-    [activeTab],
+    [activePane],
   );
 
   const handleReconnected = useCallback(
     (oldSessionId: string, newSessionId: string) => {
-      const tab = tabs.find((t) => t.sessionId === oldSessionId);
-      if (tab) {
-        updateTabSession(tab.id, newSessionId);
+      const tab = findTabBySessionId(tabs, oldSessionId);
+      const pane = tab ? findPaneBySessionId(tab, oldSessionId) : null;
+      if (tab && pane) {
+        updatePaneSession(tab.id, pane.id, newSessionId);
       }
     },
-    [tabs, updateTabSession],
+    [tabs, updatePaneSession],
   );
 
   // --- Shortcut callbacks ---
@@ -306,11 +465,8 @@ function App() {
 
   const handleCloseActiveTab = useCallback(() => {
     if (!activeTab) return;
-    if (!activeTab.connecting) {
-      invoke("close_session", { sessionId: activeTab.sessionId }).catch(() => {});
-    }
-    closeTab(activeTab.id);
-  }, [activeTab, closeTab]);
+    void handleCloseWorkspaceTab(activeTab);
+  }, [activeTab, handleCloseWorkspaceTab]);
 
   const handleNextTab = useCallback(() => {
     if (tabs.length < 2 || !activeTabId) return;
@@ -420,6 +576,192 @@ function App() {
     }
   }, [appSettings.security.enable_screen_lock, setIsLocked]);
 
+  // --- Tab context-menu callbacks ---
+
+  const handleDuplicateSession = useCallback(
+    async (tab: Tab) => {
+      const pane = getActivePane(tab);
+      if (!canCreateSessionFromPane(pane)) return;
+
+      try {
+        const tabId = addPendingTab(
+          pane.name,
+          pane.type,
+          pane.connectionId,
+          { customName: tab.customName, tabColor: tab.tabColor },
+          { afterTabId: tab.id },
+        );
+        setTerminalWindows((current) =>
+          current ? insertTabAfterInLeaf(current, tab.id, tabId, tabId) : current,
+        );
+        try {
+          const sessionId = await createSessionForPane(pane);
+          updateTabSession(tabId, sessionId);
+        } catch (error) {
+          logger.error("Failed to duplicate session", error);
+          setTerminalWindows((current) => removeTabFromTerminalWindows(current, tabId));
+          closeTab(tabId);
+          toast.error(t("tabCtx.duplicateFailed"));
+        }
+      } catch (error) {
+        logger.error("Failed to create duplicated tab", error);
+        toast.error(t("tabCtx.duplicateFailed"));
+      }
+    },
+    [addPendingTab, closeTab, createSessionForPane, t, updateTabSession],
+  );
+
+  const handleReconnectSession = useCallback(
+    async (tab: Tab) => {
+      const pane = getActivePane(tab);
+      if (!pane || pane.connecting || !canCreateSessionFromPane(pane)) return;
+
+      toast.info(t("tabCtx.reconnecting"));
+
+      try {
+        const closed = await closePaneBackendSession(pane);
+        if (!closed) {
+          throw new Error("close_session_failed");
+        }
+
+        const newSessionId = await createSessionForPane(pane);
+        updatePaneSession(tab.id, pane.id, newSessionId);
+        toast.success(t("tabCtx.reconnectSuccess"));
+      } catch (error) {
+        logger.error("Failed to reconnect session", error);
+        toast.error(t("tabCtx.reconnectFailed"));
+      }
+    },
+    [closePaneBackendSession, createSessionForPane, t, updatePaneSession],
+  );
+
+  const handleSplitSession = useCallback(
+    async (tab: Tab, direction: PaneSplitDirection) => {
+      const pane = getActivePane(tab);
+      if (!pane || !canCreateSessionFromPane(pane)) return;
+      const leaf = terminalWindows ? findTerminalWindowLeafByTabId(terminalWindows, tab.id) : null;
+      if (!leaf) {
+        toast.error(t("tabCtx.splitFailed"));
+        return;
+      }
+
+      if (leaf.tabIds.length > 1) {
+        setTerminalWindows((current) =>
+          current ? splitTerminalWindowForTab(current, tab.id, direction) : current,
+        );
+        setActiveTabId(tab.id);
+        window.dispatchEvent(new CustomEvent("dragonfly:refresh-terminals"));
+        return;
+      }
+
+      let newTabId: string | undefined;
+
+      try {
+        newTabId = addPendingTab(
+          pane.name,
+          pane.type,
+          pane.connectionId,
+          { customName: tab.customName, tabColor: tab.tabColor },
+          { afterTabId: tab.id },
+        );
+        setTerminalWindows((current) =>
+          current ? splitTerminalWindowForTab(current, tab.id, direction, newTabId) : current,
+        );
+        const sessionId = await createSessionForPane(pane);
+        if (newTabId) {
+          updateTabSession(newTabId, sessionId);
+        }
+        window.dispatchEvent(new CustomEvent("dragonfly:refresh-terminals"));
+      } catch (error) {
+        logger.error("Failed to create split session", error);
+        if (newTabId) {
+          const failedTabId = newTabId;
+          setTerminalWindows((current) => removeTabFromTerminalWindows(current, failedTabId));
+          closeTab(failedTabId);
+        }
+        toast.error(t("tabCtx.splitFailed"));
+      }
+    },
+    [addPendingTab, closeTab, createSessionForPane, t, terminalWindows, updateTabSession],
+  );
+
+  const handleCloseSession = useCallback(
+    async (tab: Tab) => {
+      const pane = getActivePane(tab);
+      if (!pane) return;
+
+      const closed = await closePaneBackendSession(pane);
+      if (!closed) {
+        toast.error(t("tabCtx.closeFailed"));
+        return;
+      }
+
+      closePane(tab.id, pane.id);
+      await persistWorkspaceNow(t("tabCtx.closeFailed"));
+    },
+    [closePane, closePaneBackendSession, persistWorkspaceNow, t],
+  );
+
+  const handleCloseAllTabs = useCallback(async () => {
+    if (!window.confirm(t("tabCtx.closeAllConfirm"))) return;
+
+    const results = await Promise.all(tabs.map((tab) => closeWorkspaceTabSessions(tab)));
+    for (const tab of tabs) {
+      closeTab(tab.id);
+    }
+    await persistWorkspaceNow(t("tabCtx.closeFailed"));
+    if (results.some((result) => !result)) {
+      toast.error(t("tabCtx.closeFailed"));
+    }
+  }, [closeTab, closeWorkspaceTabSessions, persistWorkspaceNow, t, tabs]);
+
+  const handleCloseInactiveTabs = useCallback(
+    async (keepTabId: string) => {
+      const leaf = terminalWindows ? findTerminalWindowLeafByTabId(terminalWindows, keepTabId) : null;
+      const targetTabs = leaf?.tabIds ?? tabs.map((tab) => tab.id);
+      const tabsToClose = tabs.filter((tab) => targetTabs.includes(tab.id) && tab.id !== keepTabId);
+      const results = await Promise.all(tabsToClose.map((tab) => closeWorkspaceTabSessions(tab)));
+      for (const tab of tabsToClose) {
+        closeTab(tab.id);
+      }
+      setActiveTabId(keepTabId);
+      await persistWorkspaceNow(t("tabCtx.closeFailed"));
+      if (results.some((result) => !result)) {
+        toast.error(t("tabCtx.closeFailed"));
+      }
+    },
+    [closeTab, closeWorkspaceTabSessions, persistWorkspaceNow, setActiveTabId, t, tabs, terminalWindows],
+  );
+
+  const handleCloseRightTabs = useCallback(
+    async (tabId: string) => {
+      const leaf = terminalWindows ? findTerminalWindowLeafByTabId(terminalWindows, tabId) : null;
+      const tabOrder = leaf?.tabIds ?? tabs.map((tab) => tab.id);
+      const idx = tabOrder.findIndex((id) => id === tabId);
+      if (idx === -1) return;
+
+      const rightTabIds = tabOrder.slice(idx + 1);
+      const tabsToClose = tabs.filter((tab) => rightTabIds.includes(tab.id));
+      const results = await Promise.all(tabsToClose.map((tab) => closeWorkspaceTabSessions(tab)));
+      for (let i = tabsToClose.length - 1; i >= 0; i -= 1) {
+        const tab = tabsToClose[i];
+        closeTab(tab.id);
+      }
+      await persistWorkspaceNow(t("tabCtx.closeFailed"));
+      if (results.some((result) => !result)) {
+        toast.error(t("tabCtx.closeFailed"));
+      }
+    },
+    [closeTab, closeWorkspaceTabSessions, persistWorkspaceNow, t, tabs, terminalWindows],
+  );
+
+  const handleSessionInfo = useCallback((tab: Tab) => {
+    const pane = getActivePane(tab);
+    if (pane?.connectionId) {
+      openNewSession(pane.connectionId);
+    }
+  }, []);
+
   useGlobalShortcuts({
     onNewSession: () => handleNewSession(),
     onNewLocalTerminal: handleNewLocalTerminal,
@@ -439,8 +781,8 @@ function App() {
 
   // Recording toggle
   const handleToggleRecording = useCallback(async () => {
-    if (!activeTab || activeTab.connecting) return;
-    const sessionId = activeTab.sessionId;
+    if (!activeTab || !activePane || activePane.connecting) return;
+    const sessionId = activePane.sessionId;
     const isActive = recordingSessions.has(sessionId);
 
     if (isActive) {
@@ -459,7 +801,7 @@ function App() {
       try {
         const dir = appSettings.transfer.recording_path || (await downloadDir());
         const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-        const safeName = (activeTab.name || "session").replace(/[^\w.-]/g, "_");
+        const safeName = getTabDisplayName(activeTab).replace(/[^\w.-]/g, "_");
         const filePath = `${dir}${dir.endsWith("\\") || dir.endsWith("/") ? "" : "/"}recording-${safeName}-${timestamp}.log`;
         await invoke("start_recording", { sessionId, filePath });
         setRecordingSessions((prev) => {
@@ -471,7 +813,7 @@ function App() {
         console.error("Failed to start recording", e);
       }
     }
-  }, [activeTab, recordingSessions, appSettings.transfer.recording_path, t]);
+  }, [activePane, activeTab, appSettings.transfer.recording_path, recordingSessions, t]);
 
   // Resize handlers
   const handleLeftResize = useCallback(
@@ -528,18 +870,18 @@ function App() {
         icon: (
           <PiRecordFill
             className={
-              activeTab && recordingSessions.has(activeTab.sessionId) ? "animate-pulse" : undefined
+              activePane && recordingSessions.has(activePane.sessionId) ? "animate-pulse" : undefined
             }
           />
         ),
         tooltip:
-          activeTab && recordingSessions.has(activeTab.sessionId)
+          activePane && recordingSessions.has(activePane.sessionId)
             ? t("recording.stop")
             : t("recording.start"),
       },
       lock: { icon: <MdLock />, tooltip: t("statusBar.lock") },
     }),
-    [activeTab, recordingSessions, t],
+    [activePane, recordingSessions, t],
   );
 
   const layout = uiConfig.activity_bar_layout;
@@ -617,9 +959,9 @@ function App() {
     const s = new Set<string>();
     if (uiConfig.show_quick_cmd_bar) s.add("quickCmdBar");
     if (uiConfig.show_serial_send_panel) s.add("serialSend");
-    if (activeTab && recordingSessions.has(activeTab.sessionId)) s.add("recording");
+    if (activePane && recordingSessions.has(activePane.sessionId)) s.add("recording");
     return s;
-  }, [activeTab, recordingSessions, uiConfig.show_quick_cmd_bar, uiConfig.show_serial_send_panel]);
+  }, [activePane, recordingSessions, uiConfig.show_quick_cmd_bar, uiConfig.show_serial_send_panel]);
 
   useEffect(() => {
     if (!uiConfig.show_quick_cmd_bar || !uiConfig.show_serial_send_panel) return;
@@ -652,7 +994,7 @@ function App() {
         return;
       }
       if (id === "recording") {
-        if (!activeTab || activeTab.connecting) {
+        if (!activePane || activePane.connecting) {
           toast.error(t("panel.noActiveSessions"));
           return;
         }
@@ -666,7 +1008,7 @@ function App() {
         updateUi((prev) => ({ active_right_panel: prev.active_right_panel === id ? null : id }));
       }
     },
-    [activeTab, handleToggleRecording, layout, setIsLocked, t, updateUi],
+    [activePane, handleToggleRecording, layout, setIsLocked, t, updateUi],
   );
 
   // Reorder within a zone — uses prev to avoid stale closure
@@ -718,16 +1060,16 @@ function App() {
 
   // --- Panel content rendering (side-independent) ---
 
-  const activeSessionId = activeTab?.connecting ? null : (activeTab?.sessionId ?? null);
+  const activeSessionId = activePane?.connecting ? null : (activePane?.sessionId ?? null);
   const activeSshSessionId =
-    activeTab && !activeTab.connecting && activeTab.type === "SSH" ? activeTab.sessionId : null;
+    activePane && !activePane.connecting && activePane.type === "SSH" ? activePane.sessionId : null;
   const activeBottomPanel = uiConfig.show_serial_send_panel
     ? "serialSend"
     : uiConfig.show_quick_cmd_bar
       ? "quickCmdBar"
       : null;
   const canShowSerialSendPanel =
-    !!activeTab && activeTab.type === "Serial" && !activeTab.connecting;
+    !!activePane && activePane.type === "Serial" && !activePane.connecting;
 
   const handleTransferResize = useCallback(
     (delta: number) => {
@@ -867,16 +1209,6 @@ function App() {
               backgroundColor: "var(--df-bg-terminal)",
             }}
           >
-            {/* Tab Bar */}
-            <TabBar
-              tabs={tabs}
-              activeTabId={activeTabId}
-              onTabChange={setActiveTabId}
-              onTabClose={closeTab}
-              onAddTab={() => handleNewSession()}
-            />
-
-            {/* Terminal Instances */}
             <div className="flex-1 relative overflow-hidden">
               {tabs.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-slate-500">
@@ -891,53 +1223,39 @@ function App() {
                     </button>
                   </div>
                 </div>
+              ) : terminalWindows ? (
+                <TabWindowsWorkspace
+                  layout={terminalWindows}
+                  tabsById={new Map(tabs.map((tab) => [tab.id, tab]))}
+                  onSelectTab={handleSelectLeafTab}
+                  onAddTab={handleAddTabFromLeaf}
+                  onTabClose={handleCloseWorkspaceTab}
+                  onDuplicateSession={handleDuplicateSession}
+                  onReconnectSession={handleReconnectSession}
+                  onSplitSession={handleSplitSession}
+                  onCloseSession={handleCloseSession}
+                  onCloseAll={handleCloseAllTabs}
+                  onCloseInactive={handleCloseInactiveTabs}
+                  onCloseRight={handleCloseRightTabs}
+                  onSessionInfo={handleSessionInfo}
+                  onReorderTabs={handleReorderTabsInLeaf}
+                  onActivatePane={(tabId, paneId) => {
+                    setActiveTabId(tabId);
+                    setActivePane(tabId, paneId);
+                  }}
+                  onUpdatePaneSplitRatio={(tabId, splitId, ratio) =>
+                    updateSplitRatio(tabId, splitId, ratio)
+                  }
+                  onUpdateWindowSplitRatio={handleUpdateWindowSplitRatio}
+                  onReconnected={handleReconnected}
+                />
               ) : (
-                tabs.map((tab) =>
-                  tab.connecting ? (
-                    <div
-                      key={tab.id}
-                      className="absolute inset-0 flex items-center justify-center"
-                      style={{
-                        display: activeTabId === tab.id ? "flex" : "none",
-                        color: "var(--df-text-dimmed)",
-                      }}
-                    >
-                      <div className="flex flex-col items-center gap-3 text-sm">
-                        <svg
-                          className="animate-spin w-6 h-6"
-                          style={{ color: "var(--df-primary)" }}
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                        >
-                          <title>{t("common.loading")}</title>
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                          />
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                          />
-                        </svg>
-                        <span>{tab.name}</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <XTerminal
-                      key={tab.sessionId}
-                      sessionId={tab.sessionId}
-                      active={activeTabId === tab.id}
-                      connectionId={tab.connectionId}
-                      onReconnected={handleReconnected}
-                    />
-                  ),
-                )
+                <div className="flex items-center justify-center h-full text-slate-500">
+                  <div className="text-center space-y-3">
+                    <MdTerminal className="text-4xl mx-auto" />
+                    <p className="text-sm">{t("common.loading")}</p>
+                  </div>
+                </div>
               )}
             </div>
 
@@ -961,8 +1279,8 @@ function App() {
                   style={{ height: uiConfig.serial_send_height || 120 }}
                   className="shrink-0 overflow-hidden"
                 >
-                  {canShowSerialSendPanel && activeTab ? (
-                    <SerialSendPanel sessionId={activeTab.sessionId} />
+                  {canShowSerialSendPanel && activePane ? (
+                    <SerialSendPanel sessionId={activePane.sessionId} />
                   ) : (
                     <div
                       className="h-full flex flex-col items-center justify-center gap-1 px-4 text-center"

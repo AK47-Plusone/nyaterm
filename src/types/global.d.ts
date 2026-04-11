@@ -1,6 +1,9 @@
 /** Type of terminal session. */
 export type SessionType = "SSH" | "Local" | "Telnet" | "Serial";
 
+/** Split orientation inside a workspace tab. */
+export type PaneSplitDirection = "horizontal" | "vertical";
+
 /** Connection type discriminator matching Rust ConnectionType. */
 export type ConnectionTypeTag = "ssh" | "local_terminal" | "telnet" | "serial";
 
@@ -14,15 +17,43 @@ export interface SessionInfo {
   injection_active: boolean;
 }
 
-/** UI tab representing a terminal session. */
-export interface Tab {
+/** Leaf node representing one terminal session inside a workspace tab. */
+export interface SessionPane {
   id: string;
+  kind: "leaf";
   sessionId: string;
   name: string;
   type: SessionType;
   connectionId?: string;
   /** True while the backend session is being established. XTerminal is not rendered yet. */
   connecting?: boolean;
+}
+
+/** Split node containing two child panes. */
+export interface SplitPane {
+  id: string;
+  kind: "split";
+  direction: PaneSplitDirection;
+  /** Ratio of the first child between 0 and 1. */
+  ratio: number;
+  first: PaneNode;
+  second: PaneNode;
+}
+
+/** Recursive pane tree for a workspace tab. */
+export type PaneNode = SessionPane | SplitPane;
+
+/** Top-level workspace tab shown in the terminal tab bar. */
+export interface Tab {
+  id: string;
+  /** Stable restore ordering, independent from runtime drag-reorder. */
+  persistOrder: number;
+  activePaneId: string;
+  root: PaneNode;
+  /** User-set display name shown instead of `name` when present. */
+  customName?: string;
+  /** Hex color string for the tab accent line and background tint. */
+  tabColor?: string;
 }
 
 /** SSH connection config for creating a session. */
@@ -135,11 +166,38 @@ export interface OtpCodeResult {
   remainingSeconds: number;
 }
 
-/** Saved tab state for startup restoration. */
+/** Saved leaf pane for startup restoration. */
+export interface RestorableSessionPane {
+  id?: string;
+  kind: "leaf";
+  title: string;
+  session_type: SessionType | "local";
+  connection_id?: string;
+}
+
+/** Saved split pane for startup restoration. */
+export interface RestorableSplitPane {
+  id?: string;
+  kind: "split";
+  direction: PaneSplitDirection;
+  ratio: number;
+  first: RestorablePaneNode;
+  second: RestorablePaneNode;
+}
+
+/** Saved pane tree node for startup restoration. */
+export type RestorablePaneNode = RestorableSessionPane | RestorableSplitPane;
+
+/** Saved workspace tab state for startup restoration. */
 export interface RestorableTab {
+  active_pane_id?: string;
+  root?: RestorablePaneNode;
+  /** Legacy fields kept optional so older frontend payloads still type-check during migration. */
   title: string;
   session_type: string;
   connection_id?: string;
+  custom_name?: string;
+  tab_color?: string;
 }
 
 export type LeftPanelId = "fileExplorer" | "fileTransfer" | "securityAuth";

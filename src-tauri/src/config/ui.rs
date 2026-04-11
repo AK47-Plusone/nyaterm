@@ -1,11 +1,127 @@
-use super::default_false;
+use super::{default_false, uuid_v4};
 use serde::{Deserialize, Serialize};
+
+fn default_leaf_id() -> String {
+    format!("pane-{}", uuid_v4())
+}
+
+fn default_split_id() -> String {
+    format!("split-{}", uuid_v4())
+}
+
+fn default_split_ratio() -> f64 {
+    0.5
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind")]
+pub enum RestorablePaneNode {
+    #[serde(rename = "leaf")]
+    Leaf {
+        #[serde(default = "default_leaf_id")]
+        id: String,
+        title: String,
+        session_type: String,
+        connection_id: Option<String>,
+    },
+    #[serde(rename = "split")]
+    Split {
+        #[serde(default = "default_split_id")]
+        id: String,
+        direction: String,
+        #[serde(default = "default_split_ratio")]
+        ratio: f64,
+        first: Box<RestorablePaneNode>,
+        second: Box<RestorablePaneNode>,
+    },
+}
+
+impl RestorablePaneNode {
+    pub fn first_leaf_id(&self) -> Option<&str> {
+        match self {
+            Self::Leaf { id, .. } => Some(id.as_str()),
+            Self::Split { first, second, .. } => {
+                first.first_leaf_id().or_else(|| second.first_leaf_id())
+            }
+        }
+    }
+
+    pub fn first_leaf_summary(&self) -> Option<(&str, &str, Option<&str>)> {
+        match self {
+            Self::Leaf {
+                title,
+                session_type,
+                connection_id,
+                ..
+            } => Some((title.as_str(), session_type.as_str(), connection_id.as_deref())),
+            Self::Split { first, second, .. } => first
+                .first_leaf_summary()
+                .or_else(|| second.first_leaf_summary()),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RestorableTab {
+    #[serde(default)]
+    pub active_pane_id: Option<String>,
+    #[serde(default)]
+    pub root: Option<RestorablePaneNode>,
+    #[serde(default)]
     pub title: String,
+    #[serde(default)]
     pub session_type: String,
     pub connection_id: Option<String>,
+    pub custom_name: Option<String>,
+    pub tab_color: Option<String>,
+}
+
+impl RestorableTab {
+    pub fn normalize(&mut self) -> bool {
+        let mut changed = false;
+
+        if self.root.is_none() && !self.session_type.is_empty() {
+            let leaf_id = default_leaf_id();
+            self.root = Some(RestorablePaneNode::Leaf {
+                id: leaf_id.clone(),
+                title: if self.title.is_empty() {
+                    "Session".to_string()
+                } else {
+                    self.title.clone()
+                },
+                session_type: self.session_type.clone(),
+                connection_id: self.connection_id.clone(),
+            });
+            if self.active_pane_id.is_none() {
+                self.active_pane_id = Some(leaf_id);
+            }
+            changed = true;
+        }
+
+        if let Some(root) = &self.root {
+            if self.active_pane_id.is_none() {
+                self.active_pane_id = root.first_leaf_id().map(|id| id.to_string());
+                changed = true;
+            }
+
+            if let Some((title, session_type, connection_id)) = root.first_leaf_summary() {
+                if self.title.is_empty() {
+                    self.title = title.to_string();
+                    changed = true;
+                }
+                if self.session_type.is_empty() {
+                    self.session_type = session_type.to_string();
+                    changed = true;
+                }
+                if self.connection_id.is_none() && connection_id.is_some() {
+                    self.connection_id = connection_id.map(|value| value.to_string());
+                    changed = true;
+                }
+            }
+        }
+
+        changed
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -166,6 +166,7 @@ export function ChildAppProvider({ children }: { children: ReactNode }) {
   );
 
   const noop = useCallback(() => {}, []);
+  const noopString = useCallback(() => "", []);
   const noopAsync = useCallback(async () => {}, []);
 
   return (
@@ -174,10 +175,18 @@ export function ChildAppProvider({ children }: { children: ReactNode }) {
         tabs: [],
         activeTabId: null,
         setActiveTabId: noop,
-        addTab: noop,
-        addPendingTab: () => "",
+        addTab: noopString,
+        addPendingTab: noopString,
         updateTabSession: noop,
+        updatePaneSession: noop,
+        setActivePane: noop,
+        updateSplitRatio: noop,
+        splitPane: () => null,
+        closePane: noop,
+        reorderTabs: noop,
+        updateTab: noopAsync,
         closeTab: noop,
+        persistTabsNow: noopAsync,
         appSettings,
         updateAppSettings,
         updateUi,

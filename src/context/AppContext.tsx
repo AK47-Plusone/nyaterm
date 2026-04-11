@@ -11,11 +11,29 @@ import {
 import type {
   AppSettings,
   Group,
+  PaneSplitDirection,
   SavedConnection,
+  SessionPane,
   SessionType,
   Tab,
   UiConfig,
 } from "@/types/global";
+import {
+  collectSessionPanes,
+  createSessionPane,
+  createWorkspaceTab,
+  ensureActivePane,
+  getNextPersistOrder,
+  insertTabAfter,
+  removeSessionPane,
+  restoreTabFromPersistence,
+  serializeTabsForPersistence,
+  splitSessionPane,
+  updateSplitRatio as updateWorkspaceSplitRatio,
+  updateSessionPane,
+  moveTab,
+  getFirstSessionPane,
+} from "@/lib/workspaceTabs";
 import { invoke } from "../lib/invoke";
 import { logger } from "../lib/logger";
 import { DEFAULT_TERMINAL_FONT_SIZE } from "../lib/terminalFontSize";
@@ -25,12 +43,45 @@ interface AppContextType {
   tabs: Tab[];
   activeTabId: string | null;
   setActiveTabId: (id: string | null) => void;
-  addTab: (sessionId: string, name: string, type: SessionType, connectionId?: string) => void;
+  addTab: (
+    sessionId: string,
+    name: string,
+    type: SessionType,
+    connectionId?: string,
+    extra?: Partial<Pick<Tab, "customName" | "tabColor">>,
+    options?: { afterTabId?: string },
+  ) => string;
   /** Immediately add a "connecting" tab and make it active. Returns the new tabId. */
-  addPendingTab: (name: string, type: SessionType, connectionId?: string) => string;
-  /** Swap the temporary sessionId for the real one and clear the connecting flag. */
+  addPendingTab: (
+    name: string,
+    type: SessionType,
+    connectionId?: string,
+    extra?: Partial<Pick<Tab, "customName" | "tabColor">>,
+    options?: { afterTabId?: string },
+  ) => string;
+  /** Swap the active pane's temporary sessionId for the real one and clear the connecting flag. */
   updateTabSession: (tabId: string, sessionId: string) => void;
+  /** Update one specific pane's session binding. */
+  updatePaneSession: (tabId: string, paneId: string, sessionId: string) => void;
+  setActivePane: (tabId: string, paneId: string) => void;
+  updateSplitRatio: (tabId: string, splitId: string, ratio: number) => void;
+  splitPane: (
+    tabId: string,
+    paneId: string,
+    direction: PaneSplitDirection,
+    pane: SessionPane,
+    options?: { immediatePersist?: boolean },
+  ) => string | null;
+  closePane: (tabId: string, paneId: string, options?: { immediatePersist?: boolean }) => void;
+  reorderTabs: (fromTabId: string, toIndex: number) => void;
+  /** Update user-editable tab properties (customName, tabColor). */
+  updateTab: (
+    tabId: string,
+    updates: Partial<Pick<Tab, "customName" | "tabColor">>,
+    options?: { immediatePersist?: boolean },
+  ) => Promise<void>;
   closeTab: (tabId: string) => void;
+  persistTabsNow: () => Promise<void>;
 
   // App Settings (includes UI config)
   appSettings: AppSettings;
@@ -178,11 +229,13 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
 export function AppProvider({ children }: { children: ReactNode }) {
   // Tabs State
   const [tabs, setTabs] = useState<Tab[]>([]);
+  const tabsRef = useRef<Tab[]>([]);
   const [activeTabIdState, setActiveTabIdState] = useState<string | null>(null);
   const activeTabIdRef = useRef<string | null>(null);
 
   // App Settings State (includes UI config)
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const appSettingsRef = useRef<AppSettings>(DEFAULT_APP_SETTINGS);
   const appSettingsLoaded = useRef(false);
   const appSettingsSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -212,6 +265,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     invoke<AppSettings>("get_app_settings")
       .then((cfg) => {
+        appSettingsRef.current = cfg;
         setAppSettings(cfg);
         appSettingsLoaded.current = true;
         setSettingsLoaded(true);
@@ -236,6 +290,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setAppSettings((prev) => {
         const nextUpdates = typeof updates === "function" ? updates(prev) : updates;
         const next = { ...prev, ...nextUpdates };
+        appSettingsRef.current = next;
         if (appSettingsLoaded.current) {
           if (appSettingsSaveTimerRef.current) clearTimeout(appSettingsSaveTimerRef.current);
           appSettingsSaveTimerRef.current = setTimeout(() => {
@@ -285,75 +340,253 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [refreshConnections]);
 
+  const syncOpenTabs = useCallback(
+    async (nextTabs: Tab[], options?: { immediatePersist?: boolean }) => {
+      if (!hasRestored.current || !appSettingsRef.current.general.startup_restore) return;
+
+      const openTabs = serializeTabsForPersistence(nextTabs);
+      updateUi({ open_tabs: openTabs });
+
+      if (!options?.immediatePersist) return;
+
+      const nextSettings: AppSettings = {
+        ...appSettingsRef.current,
+        ui: { ...appSettingsRef.current.ui, open_tabs: openTabs },
+      };
+      appSettingsRef.current = nextSettings;
+      await invoke("save_app_settings", { settings: nextSettings });
+    },
+    [updateUi],
+  );
+
+  const commitTabs = useCallback(
+    async (
+      nextTabs: Tab[],
+      options?: {
+        syncPersisted?: boolean;
+        immediatePersist?: boolean;
+      },
+    ) => {
+      const normalizedTabs = nextTabs.map(ensureActivePane);
+      tabsRef.current = normalizedTabs;
+      setTabs(normalizedTabs);
+
+      if (options?.syncPersisted === false) return;
+      await syncOpenTabs(normalizedTabs, { immediatePersist: options?.immediatePersist });
+    },
+    [syncOpenTabs],
+  );
+
   // 4. Tab Logic
   const addTab = useCallback(
-    (sessionId: string, name: string, type: SessionType, connectionId?: string) => {
-      const tabId = `tab-${Date.now()}`;
-      const newTab: Tab = {
-        id: tabId,
-        sessionId,
-        name,
-        type,
-        connectionId,
-      };
-      setTabs((prev) => [...prev, newTab]);
-      setActiveTabId(tabId);
+    (
+      sessionId: string,
+      name: string,
+      type: SessionType,
+      connectionId?: string,
+      extra?: Partial<Pick<Tab, "customName" | "tabColor">>,
+      options?: { afterTabId?: string },
+    ) => {
+      const pane = createSessionPane(name, type, connectionId, { sessionId });
+      const newTab = createWorkspaceTab(pane, getNextPersistOrder(tabsRef.current), extra);
+      const nextTabs = options?.afterTabId
+        ? insertTabAfter(tabsRef.current, options.afterTabId, newTab)
+        : [...tabsRef.current, newTab];
+      void commitTabs(nextTabs);
+      setActiveTabId(newTab.id);
 
       // Close dialogs when session starts
       setShowNewSession(false);
       setEditingConnection(undefined);
+      return newTab.id;
     },
-    [setActiveTabId],
+    [commitTabs, setActiveTabId],
   );
 
   const addPendingTab = useCallback(
-    (name: string, type: SessionType, connectionId?: string): string => {
-      const tabId = `tab-${Date.now()}`;
-      const newTab: Tab = {
-        id: tabId,
-        sessionId: tabId,
-        name,
-        type,
-        connectionId,
-        connecting: true,
-      };
-      setTabs((prev) => [...prev, newTab]);
-      setActiveTabId(tabId);
-      return tabId;
+    (
+      name: string,
+      type: SessionType,
+      connectionId?: string,
+      extra?: Partial<Pick<Tab, "customName" | "tabColor">>,
+      options?: { afterTabId?: string },
+    ): string => {
+      const pane = createSessionPane(name, type, connectionId, { connecting: true });
+      const newTab = createWorkspaceTab(pane, getNextPersistOrder(tabsRef.current), extra);
+      const nextTabs = options?.afterTabId
+        ? insertTabAfter(tabsRef.current, options.afterTabId, newTab)
+        : [...tabsRef.current, newTab];
+      void commitTabs(nextTabs);
+      setActiveTabId(newTab.id);
+      return newTab.id;
     },
-    [setActiveTabId],
+    [commitTabs, setActiveTabId],
   );
 
   const updateTabSession = useCallback((tabId: string, sessionId: string) => {
-    setTabs((prev) =>
-      prev.map((tab) =>
+    const tab = tabsRef.current.find((item) => item.id === tabId);
+    if (!tab) return;
+    const paneId = tab.activePaneId;
+    const nextTabs = tabsRef.current.map((item) =>
+      item.id === tabId ? { ...item, root: updateSessionPane(item.root, paneId, { sessionId, connecting: false }) } : item,
+    );
+    void commitTabs(nextTabs);
+  }, [commitTabs]);
+
+  const updatePaneSession = useCallback(
+    (tabId: string, paneId: string, sessionId: string) => {
+      const nextTabs = tabsRef.current.map((tab) =>
         tab.id === tabId
           ? {
               ...tab,
-              sessionId,
-              connecting: false,
+              root: updateSessionPane(tab.root, paneId, { sessionId, connecting: false }),
             }
           : tab,
-      ),
-    );
-  }, []);
+      );
+      void commitTabs(nextTabs);
+    },
+    [commitTabs],
+  );
+
+  const setActivePane = useCallback(
+    (tabId: string, paneId: string) => {
+      const nextTabs = tabsRef.current.map((tab) =>
+        tab.id === tabId ? ensureActivePane({ ...tab, activePaneId: paneId }) : tab,
+      );
+      void commitTabs(nextTabs);
+      setActiveTabId(tabId);
+    },
+    [commitTabs, setActiveTabId],
+  );
+
+  const splitPane = useCallback(
+    (
+      tabId: string,
+      paneId: string,
+      direction: PaneSplitDirection,
+      pane: SessionPane,
+      options?: { immediatePersist?: boolean },
+    ) => {
+      const tab = tabsRef.current.find((item) => item.id === tabId);
+      if (!tab) return null;
+
+      const nextTabs = tabsRef.current.map((item) =>
+        item.id === tabId
+          ? ensureActivePane({
+              ...item,
+              activePaneId: pane.id,
+              root: splitSessionPane(item.root, paneId, direction, pane),
+            })
+          : item,
+      );
+      void commitTabs(nextTabs, { immediatePersist: options?.immediatePersist });
+      setActiveTabId(tabId);
+      return pane.id;
+    },
+    [commitTabs, setActiveTabId],
+  );
+
+  const updateSplitRatio = useCallback(
+    (tabId: string, splitId: string, ratio: number) => {
+      const nextTabs = tabsRef.current.map((tab) =>
+        tab.id === tabId
+          ? {
+              ...tab,
+              root: updateWorkspaceSplitRatio(tab.root, splitId, ratio),
+            }
+          : tab,
+      );
+      void commitTabs(nextTabs);
+    },
+    [commitTabs],
+  );
+
+  const closePane = useCallback(
+    (tabId: string, paneId: string, options?: { immediatePersist?: boolean }) => {
+      const currentTabs = tabsRef.current;
+      const index = currentTabs.findIndex((item) => item.id === tabId);
+      if (index === -1) return;
+
+      const tab = currentTabs[index];
+      const nextRoot = removeSessionPane(tab.root, paneId);
+
+      if (!nextRoot) {
+        const nextTabs = currentTabs.filter((item) => item.id !== tabId);
+        if (activeTabIdRef.current === tabId) {
+          const fallback = nextTabs[Math.max(0, index - 1)] ?? nextTabs[0] ?? null;
+          setActiveTabId(fallback?.id ?? null);
+        }
+        void commitTabs(nextTabs, { immediatePersist: options?.immediatePersist });
+        return;
+      }
+
+      const nextActivePaneId =
+        tab.activePaneId === paneId
+          ? getFirstSessionPane(nextRoot)?.id ?? tab.activePaneId
+          : tab.activePaneId;
+
+      const nextTabs = currentTabs.map((item) =>
+        item.id === tabId
+          ? ensureActivePane({
+              ...item,
+              activePaneId: nextActivePaneId,
+              root: nextRoot,
+            })
+          : item,
+      );
+      void commitTabs(nextTabs, { immediatePersist: options?.immediatePersist });
+    },
+    [commitTabs, setActiveTabId],
+  );
+
+  const updateTab = useCallback(
+    async (
+      tabId: string,
+      updates: Partial<Pick<Tab, "customName" | "tabColor">>,
+      options?: { immediatePersist?: boolean },
+    ) => {
+      const nextTabs = tabsRef.current.map((tab) => (tab.id === tabId ? { ...tab, ...updates } : tab));
+      await commitTabs(nextTabs, { immediatePersist: options?.immediatePersist });
+    },
+    [commitTabs],
+  );
 
   const closeTab = useCallback(
     (tabId: string) => {
-      setTabs((prev) => {
-        const newTabs = prev.filter((t) => t.id !== tabId);
-        if (activeTabIdRef.current === tabId) {
-          if (newTabs.length > 0) {
-            setActiveTabId(newTabs[newTabs.length - 1].id);
-          } else {
-            setActiveTabId(null);
-          }
-        }
-        return newTabs;
-      });
+      const currentTabs = tabsRef.current;
+      const index = currentTabs.findIndex((tab) => tab.id === tabId);
+      if (index === -1) return;
+
+      const nextTabs = currentTabs.filter((tab) => tab.id !== tabId);
+      if (activeTabIdRef.current === tabId) {
+        const fallback = nextTabs[Math.max(0, index - 1)] ?? nextTabs[0] ?? null;
+        setActiveTabId(fallback?.id ?? null);
+      }
+      void commitTabs(nextTabs);
     },
-    [setActiveTabId],
+    [commitTabs, setActiveTabId],
   );
+
+  const reorderTabs = useCallback(
+    (fromTabId: string, toIndex: number) => {
+      const nextTabs = moveTab(tabsRef.current, fromTabId, toIndex);
+      void commitTabs(nextTabs, { syncPersisted: false });
+    },
+    [commitTabs],
+  );
+
+  const persistTabsNow = useCallback(async () => {
+    if (!hasRestored.current || !appSettingsRef.current.general.startup_restore) return;
+    const nextSettings: AppSettings = {
+      ...appSettingsRef.current,
+      ui: {
+        ...appSettingsRef.current.ui,
+        open_tabs: serializeTabsForPersistence(tabsRef.current),
+      },
+    };
+    appSettingsRef.current = nextSettings;
+    await invoke("save_app_settings", { settings: nextSettings });
+  }, []);
 
   // 5. Startup Restore Logic
   const hasRestored = useRef(false);
@@ -366,42 +599,72 @@ export function AppProvider({ children }: { children: ReactNode }) {
         appSettings.ui.open_tabs &&
         appSettings.ui.open_tabs.length > 0
       ) {
-        appSettings.ui.open_tabs.forEach((tab) => {
-          const cid = tab.connection_id;
-          if (tab.session_type === "SSH" && cid) {
-            invoke<string>("create_ssh_session", { connectionId: cid })
-              .then((sessionId) => addTab(sessionId, tab.title, "SSH", cid))
-              .catch((e) => logger.error(`Restore SSH failed for ${tab.title}`, e));
-          } else if (tab.session_type === "Local" || tab.session_type === "local") {
-            invoke<string>("create_local_session", { connectionId: cid || null })
-              .then((sessionId) => addTab(sessionId, tab.title, "Local", cid))
-              .catch((e) => logger.error(`Restore Local failed`, e));
-          } else if (tab.session_type === "Telnet" && cid) {
-            invoke<string>("create_telnet_session", { connectionId: cid })
-              .then((sessionId) => addTab(sessionId, tab.title, "Telnet", cid))
-              .catch((e) => logger.error(`Restore Telnet failed for ${tab.title}`, e));
-          } else if (tab.session_type === "Serial" && cid) {
-            invoke<string>("create_serial_session", { connectionId: cid })
-              .then((sessionId) => addTab(sessionId, tab.title, "Serial", cid))
-              .catch((e) => logger.error(`Restore Serial failed for ${tab.title}`, e));
-          }
+        const restoredTabs = appSettings.ui.open_tabs
+          .map((tab, index) => restoreTabFromPersistence(tab, index))
+          .filter((tab): tab is Tab => tab !== null);
+
+        tabsRef.current = restoredTabs;
+        setTabs(restoredTabs);
+        if (restoredTabs.length > 0) {
+          setActiveTabId(restoredTabs[restoredTabs.length - 1].id);
+        }
+
+        restoredTabs.forEach((tab) => {
+          const panes = collectSessionPanes(tab.root);
+
+          panes.forEach((pane) => {
+            const cid = pane.connectionId;
+            switch (pane.type) {
+              case "SSH":
+                if (!cid) {
+                  void closePane(tab.id, pane.id);
+                  return;
+                }
+                invoke<string>("create_ssh_session", { connectionId: cid })
+                  .then((sessionId) => updatePaneSession(tab.id, pane.id, sessionId))
+                  .catch((e) => {
+                    logger.error(`Restore SSH failed for ${pane.name}`, e);
+                    closePane(tab.id, pane.id);
+                  });
+                break;
+              case "Local":
+                invoke<string>("create_local_session", { connectionId: cid || null })
+                  .then((sessionId) => updatePaneSession(tab.id, pane.id, sessionId))
+                  .catch((e) => {
+                    logger.error("Restore Local failed", e);
+                    closePane(tab.id, pane.id);
+                  });
+                break;
+              case "Telnet":
+                if (!cid) {
+                  void closePane(tab.id, pane.id);
+                  return;
+                }
+                invoke<string>("create_telnet_session", { connectionId: cid })
+                  .then((sessionId) => updatePaneSession(tab.id, pane.id, sessionId))
+                  .catch((e) => {
+                    logger.error(`Restore Telnet failed for ${pane.name}`, e);
+                    closePane(tab.id, pane.id);
+                  });
+                break;
+              case "Serial":
+                if (!cid) {
+                  void closePane(tab.id, pane.id);
+                  return;
+                }
+                invoke<string>("create_serial_session", { connectionId: cid })
+                  .then((sessionId) => updatePaneSession(tab.id, pane.id, sessionId))
+                  .catch((e) => {
+                    logger.error(`Restore Serial failed for ${pane.name}`, e);
+                    closePane(tab.id, pane.id);
+                  });
+                break;
+            }
+          });
         });
       }
     }
-  }, [appSettings, addTab]);
-
-  // 6. Sync opened tabs
-  useEffect(() => {
-    if (hasRestored.current && appSettings.general.startup_restore) {
-      updateUi({
-        open_tabs: tabs.map((t) => ({
-          title: t.name,
-          session_type: t.type,
-          connection_id: t.connectionId,
-        })),
-      });
-    }
-  }, [tabs, appSettings.general.startup_restore, updateUi]);
+  }, [appSettings, closePane, setActiveTabId, updatePaneSession]);
 
   return (
     <AppContext.Provider
@@ -412,7 +675,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addTab,
         addPendingTab,
         updateTabSession,
+        updatePaneSession,
+        setActivePane,
+        updateSplitRatio,
+        splitPane,
+        closePane,
+        reorderTabs,
+        updateTab,
         closeTab,
+        persistTabsNow,
         appSettings,
         updateAppSettings,
         updateUi,

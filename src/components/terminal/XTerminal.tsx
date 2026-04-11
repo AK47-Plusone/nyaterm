@@ -26,6 +26,7 @@ import "@xterm/xterm/css/xterm.css";
 interface XTerminalProps {
   sessionId: string;
   active: boolean;
+  visible?: boolean;
   connectionId?: string;
   onReconnected?: (oldSessionId: string, newSessionId: string) => void;
 }
@@ -34,7 +35,13 @@ interface XTerminalProps {
  * xterm.js terminal for a session. Handles OSC 133 shell integration (or fallback prompt
  * detection), fuzzy command history suggestions, and resize/fit. Key props: sessionId, active.
  */
-export default function XTerminal({ sessionId, active, connectionId, onReconnected }: XTerminalProps) {
+export default function XTerminal({
+  sessionId,
+  active,
+  visible = true,
+  connectionId,
+  onReconnected,
+}: XTerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -655,13 +662,33 @@ export default function XTerminal({ sessionId, active, connectionId, onReconnect
 
   // Re-fit and focus when tab becomes active
   useEffect(() => {
-    if (active && fitAddonRef.current && terminalRef.current) {
+    if (active && visible && fitAddonRef.current && terminalRef.current) {
       requestAnimationFrame(() => {
         fitAddonRef.current?.fit();
+        terminalRef.current?.refresh(0, Math.max(0, terminalRef.current.rows - 1));
         terminalRef.current?.focus();
       });
     }
-  }, [active]);
+  }, [active, visible]);
+
+  useEffect(() => {
+    const handleRefresh = () => {
+      if (!visible || !fitAddonRef.current || !terminalRef.current) return;
+
+      requestAnimationFrame(() => {
+        fitAddonRef.current?.fit();
+        terminalRef.current?.refresh(0, Math.max(0, terminalRef.current.rows - 1));
+        if (active) {
+          terminalRef.current?.focus();
+        }
+      });
+    };
+
+    window.addEventListener("dragonfly:refresh-terminals", handleRefresh);
+    return () => {
+      window.removeEventListener("dragonfly:refresh-terminals", handleRefresh);
+    };
+  }, [active, visible]);
 
   const doFind = useCallback(
     (selection?: string) => {
@@ -680,7 +707,7 @@ export default function XTerminal({ sessionId, active, connectionId, onReconnect
   }, [doFind]);
 
   return (
-    <div className="h-full w-full relative" style={{ display: active ? "block" : "none" }}>
+    <div className="h-full w-full relative" style={{ display: visible ? "block" : "none" }}>
       <TerminalContextMenu terminalRef={terminalRef} onFind={doFind}>
         <div ref={containerRef} className="h-full w-full" />
       </TerminalContextMenu>
