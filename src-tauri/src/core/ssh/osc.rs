@@ -98,13 +98,14 @@ pub fn injection_script(shell: ShellKind, ready_marker: &str) -> Option<String> 
         ShellKind::PowerShell => Some(format!(
             concat!(
                 " if (-not $env:DFLY_INJ) {{ $env:DFLY_INJ='1';",
+                " $dfEsc = [char]27; $dfBel = [char]7;",
                 " function prompt {{ $p = (pwd).ProviderPath;",
                 " $h = [System.Net.Dns]::GetHostName();",
-                " Write-Host -NoNewline \"`e]7;file://$h$p`a\";",
+                " Write-Host -NoNewline \"$dfEsc]7;file://$h$p$dfBel\";",
                 " return \"PS $p> \" }} }};",
-                " Write-Host -NoNewline \"`e]7777;DflyReady:{}`a\"\n",
+                " Write-Host -NoNewline \"$dfEsc]7777;DflyReady:{}$dfBel\"\n",
             ),
-            // PowerShell uses backtick-e for ESC; embed the raw session id.
+            // Embed the raw session id into the ready marker body.
             ready_marker
                 .trim_start_matches('\x1b')
                 .trim_start_matches("]7777;DflyReady:")
@@ -239,5 +240,21 @@ fn parse_osc7_payload(payload: &str) -> Option<String> {
         None
     } else {
         Some(path)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{build_ready_marker, injection_script, ShellKind};
+
+    #[test]
+    fn powershell_injection_uses_character_escapes() {
+        let script = injection_script(ShellKind::PowerShell, &build_ready_marker("session-1"))
+            .expect("powershell injection script");
+
+        assert!(script.contains("[char]27"));
+        assert!(script.contains("[char]7"));
+        assert!(!script.contains("`e"));
+        assert!(script.contains("DflyReady:session-1"));
     }
 }

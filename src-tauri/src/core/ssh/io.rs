@@ -138,7 +138,7 @@ pub(super) async fn ssh_io_loop(
     injection_script: Option<String>,
     ready_marker: String,
 ) {
-    const INJECT_TIMEOUT_SECS: u64 = 10;
+    const INJECT_TIMEOUT_SECS: u64 = 30;
 
     let output_event = format!("terminal-output-{}", session_id);
     let cwd_event = format!("cwd-changed-{}", session_id);
