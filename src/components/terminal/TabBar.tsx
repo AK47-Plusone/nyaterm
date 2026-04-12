@@ -10,6 +10,8 @@ import TabContextMenu from "./TabContextMenu";
 interface TabBarProps {
   tabs: Tab[];
   activeTabId: string | null;
+  focusedTabId?: string | null;
+  unreadTabIds?: Set<string>;
   onTabChange: (tabId: string) => void;
   onTabClose: (tab: Tab) => void | Promise<void>;
   onAddTab: () => void;
@@ -28,6 +30,8 @@ interface TabBarProps {
 function TabBar({
   tabs,
   activeTabId,
+  focusedTabId,
+  unreadTabIds,
   onTabChange,
   onTabClose,
   onAddTab,
@@ -142,6 +146,8 @@ function TabBar({
     >
       {tabs.map((tab, index) => {
         const isActive = activeTabId === tab.id;
+        const isFocused = focusedTabId === tab.id;
+        const showUnreadIndicator = !isFocused && unreadTabIds?.has(tab.id);
         const displayName = getTabDisplayName(tab);
         const accentColor = tab.tabColor;
 
@@ -223,19 +229,23 @@ function TabBar({
                 <span className="max-w-[160px] truncate whitespace-nowrap">{displayName}</span>
 
                 <div className="relative ml-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center">
-                  <div
-                    className={`absolute inset-0 flex items-center justify-center rounded transition-all duration-200 ${
-                      isActive
-                        ? "text-[var(--df-text-muted)]"
-                        : "text-[var(--df-text-dimmed)] opacity-0 group-hover:opacity-100"
-                    } hover:!bg-red-500/10 hover:!text-red-500 active:scale-90 active:!bg-red-500/20`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void onTabClose(tab);
-                    }}
-                  >
-                    <MdClose className="text-[12px]" />
-                  </div>
+                  {showUnreadIndicator ? (
+                    <span className="h-2 w-2 rounded-full bg-green-500 animate-breathing" />
+                  ) : (
+                    <div
+                      className={`absolute inset-0 flex items-center justify-center rounded transition-all duration-200 ${
+                        isActive
+                          ? "text-[var(--df-text-muted)]"
+                          : "text-[var(--df-text-dimmed)] opacity-0 group-hover:opacity-100"
+                      } hover:!bg-red-500/10 hover:!text-red-500 active:scale-90 active:!bg-red-500/20`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void onTabClose(tab);
+                      }}
+                    >
+                      <MdClose className="text-[12px]" />
+                    </div>
+                  )}
                 </div>
               </div>
             </TabContextMenu>
