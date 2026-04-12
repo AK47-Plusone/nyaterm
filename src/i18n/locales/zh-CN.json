@@ -192,6 +192,8 @@
     "totalItems": "共 {{count}} 项",
     "type": "类型",
     "uid": "UID",
+    "unsupportedSession": "文件浏览器仅支持 SSH 会话",
+    "unsupportedSessionDesc": "请切换到 SSH 标签页后再浏览远程文件。",
     "upload": "上传文件",
     "uploadFolder": "上传文件夹",
     "uploadOnce": "上传一次",

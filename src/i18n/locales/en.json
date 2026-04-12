@@ -192,6 +192,8 @@
     "totalItems": "{{count}} items",
     "type": "Type",
     "uid": "UID",
+    "unsupportedSession": "File Explorer is only available for SSH sessions",
+    "unsupportedSessionDesc": "Switch to an SSH tab to browse remote files.",
     "upload": "Upload Files",
     "uploadFolder": "Upload Folder",
     "uploadOnce": "Upload Once",

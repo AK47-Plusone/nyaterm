@@ -112,9 +112,12 @@ function ToolbarIconButton({ label, children, ...props }: ToolbarIconButtonProps
 }
 
 /** Remote file browser for active SSH session. Lists dirs/files, supports navigation. */
-export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
+export default function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps) {
   const { t } = useTranslation();
   const { appSettings } = useApp();
+  const canBrowseFiles = !!activeSessionId && activeSessionType === "SSH";
+  const hasUnsupportedSession =
+    !!activeSessionId && !!activeSessionType && activeSessionType !== "SSH";
 
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [currentPath, setCurrentPath] = useState("");
@@ -156,8 +159,9 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
 
   // Resolve whether backend terminal-path tracking is available for this session.
   useEffect(() => {
-    if (!activeSessionId) {
+    if (!canBrowseFiles || !activeSessionId) {
       setCwdTrackingActive(false);
+      setAutoSyncCwd(false);
       return;
     }
     invoke<SessionInfo[]>("list_sessions")
@@ -171,7 +175,7 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
         setCwdTrackingActive(false);
         setAutoSyncCwd(false);
       });
-  }, [activeSessionId]);
+  }, [activeSessionId, canBrowseFiles]);
 
   useEffect(() => {
     const unlisten = listen<{ session_id: string; local_path: string; remote_path: string }>(
@@ -216,7 +220,7 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
 
   const loadDirectory = useCallback(
     async (path: string) => {
-      if (!activeSessionId) return;
+      if (!canBrowseFiles || !activeSessionId) return;
       const normalizedPath = normalizeDirectoryPath(path);
       setDirectoryLoading(true);
       setError(null);
@@ -250,7 +254,7 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
         setDirectoryLoading(false);
       }
     },
-    [activeSessionId],
+    [activeSessionId, canBrowseFiles],
   );
 
   useEffect(() => {
@@ -266,10 +270,12 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
     }
     prevSessionIdRef.current = activeSessionId;
 
-    if (!activeSessionId) {
+    if (!canBrowseFiles || !activeSessionId) {
       setFiles([]);
       setCurrentPath("");
       setHomeDir("");
+      setError(null);
+      setSelectedFiles(new Set());
       return;
     }
 
@@ -298,7 +304,7 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
     return () => {
       cancelled = true;
     };
-  }, [activeSessionId, loadDirectory]);
+  }, [activeSessionId, canBrowseFiles, loadDirectory]);
 
   useEffect(() => {
     if (isEditingPath) {
@@ -307,7 +313,7 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
   }, [isEditingPath]);
 
   useEffect(() => {
-    if (!activeSessionId || !currentPath) return;
+    if (!canBrowseFiles || !activeSessionId || !currentPath) return;
 
     const unlisten = listen<TransferEventPayload>("transfer-event", (event) => {
       const { session_id, direction, status, remote_path } = event.payload;
@@ -335,7 +341,7 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, [activeSessionId, currentPath, loadDirectory]);
+  }, [activeSessionId, canBrowseFiles, currentPath, loadDirectory]);
 
   const handleSelect = useCallback(
     (entry: FileEntry, event: React.MouseEvent) => {
@@ -428,8 +434,8 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
 
   const handleSendCurrentPathToTerminal = () => {
     if (!activeSessionId) return;
-    invoke("write_to_session", { sessionId: activeSessionId, data: currentPath });
-    emit(`focus-terminal-${activeSessionId}`);
+    invoke("write_to_session", { sessionId: activeSessionId, data: currentPath }).catch(() => {});
+    emit(`focus-terminal-${activeSessionId}`).catch(() => {});
   };
 
   const handleDeleteSelected = () => {
@@ -495,8 +501,8 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
     invoke("write_to_session", {
       sessionId: activeSessionId,
       data: text,
-    });
-    emit(`focus-terminal-${activeSessionId}`);
+    }).catch(() => {});
+    emit(`focus-terminal-${activeSessionId}`).catch(() => {});
   };
 
   const handleDelete = (entry: FileEntry) => {
@@ -680,7 +686,7 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
     >
       <PanelHeader title={t("panel.fileExplorer")} />
 
-      {activeSessionId && (
+      {canBrowseFiles && (
         <div
           className="flex items-center px-1.5 py-1 border-b gap-0.5"
           style={{ backgroundColor: "var(--df-bg-panel)", borderColor: "var(--df-border)" }}
@@ -778,7 +784,7 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
         </div>
       )}
 
-      {activeSessionId && (
+      {canBrowseFiles && (
         <div
           className="px-2 py-1 border-b flex items-center"
           style={{ borderColor: "var(--df-border)", minHeight: "26px" }}
@@ -833,6 +839,12 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
               <div className="text-center py-8 text-xs" style={{ color: "var(--df-text-dimmed)" }}>
                 <MdFolderOff className="text-xl block mx-auto mb-2" />
                 <div className="text-sm block mb-2">{t("fileExplorer.connectToSession")}</div>
+              </div>
+            ) : hasUnsupportedSession ? (
+              <div className="text-center py-8 text-xs" style={{ color: "var(--df-text-dimmed)" }}>
+                <MdFolderOff className="text-xl block mx-auto mb-2" />
+                <div className="text-sm block mb-2">{t("fileExplorer.unsupportedSession")}</div>
+                <div>{t("fileExplorer.unsupportedSessionDesc")}</div>
               </div>
             ) : directoryLoading ? (
               <div className="text-center py-4 text-xs" style={{ color: "var(--df-text-dimmed)" }}>
@@ -895,7 +907,7 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
             )}
           </div>
         </ContextMenuTrigger>
-        {activeSessionId && (
+        {canBrowseFiles && (
           <ContextMenuContent className="w-52">
             <ContextMenuItem onClick={() => loadDirectory(currentPath)}>
               <MdRefresh className="mr-2 h-4 w-4" />
@@ -948,7 +960,7 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
         )}
       </ContextMenu>
 
-      {activeSessionId && (
+      {canBrowseFiles && (
         <div
           className="px-2 py-1.5 text-[0.6875rem] border-t flex items-center justify-between shrink-0"
           style={{
@@ -1028,8 +1040,8 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
                         invoke("write_to_session", {
                           sessionId: activeSessionId,
                           data: `${currentPath}`,
-                        });
-                        emit(`focus-terminal-${activeSessionId}`);
+                        }).catch(() => {});
+                        emit(`focus-terminal-${activeSessionId}`).catch(() => {});
                       }
                     }}
                   >
