@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/context-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useApp } from "@/context/AppContext";
+import { getErrorMessage } from "@/lib/errors";
 import { invoke } from "@/lib/invoke";
 import { logger } from "@/lib/logger";
 import type { Group, SavedConnection } from "@/types/global";
@@ -75,7 +76,7 @@ export default function SavedConnections({
     refreshConnections,
     addPendingTab,
     updateTabSession,
-    closeTab,
+    markTabConnectionFailed,
     appSettings,
     updateUi,
   } = useApp();
@@ -216,10 +217,10 @@ export default function SavedConnections({
       }
       updateTabSession(tabId, sessionId);
     } catch (e) {
+      const errorMessage = getErrorMessage(e);
       logger.error(`Connection failed for "${conn.name}"`, e);
-      toast.error(t("savedConnections.connectionFailed", { error: e }));
-      closeTab(tabId);
-      onEditConnection(conn, true);
+      toast.error(t("savedConnections.connectionFailed", { error: errorMessage }));
+      markTabConnectionFailed(tabId, errorMessage);
     } finally {
       connectingIdRef.current = null;
     }

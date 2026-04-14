@@ -1,6 +1,6 @@
-import { memo, type DragEvent, useCallback, useState } from "react";
+import { type DragEvent, memo, useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { MdAdd, MdClose, MdDns, MdTerminal } from "react-icons/md";
+import { MdAdd, MdClose, MdDns, MdErrorOutline, MdTerminal } from "react-icons/md";
 import { getActivePane, getTabDisplayName } from "@/lib/workspaceTabs";
 import type { PaneSplitDirection, Tab } from "@/types/global";
 import { useApp } from "../../context/AppContext";
@@ -50,13 +50,10 @@ function TabBar({
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
 
-  const getInsertionIndex = useCallback(
-    (event: DragEvent<HTMLDivElement>, index: number) => {
-      const rect = event.currentTarget.getBoundingClientRect();
-      return event.clientX < rect.left + rect.width / 2 ? index : index + 1;
-    },
-    [],
-  );
+  const getInsertionIndex = useCallback((event: DragEvent<HTMLDivElement>, index: number) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return event.clientX < rect.left + rect.width / 2 ? index : index + 1;
+  }, []);
 
   const resetDragState = useCallback(() => {
     setDraggedTabId(null);
@@ -117,6 +114,15 @@ function TabBar({
             d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
           />
         </svg>
+      );
+    }
+
+    if (pane?.connectError) {
+      return (
+        <MdErrorOutline
+          className="text-sm shrink-0"
+          style={{ color: "var(--destructive, #ef4444)" }}
+        />
       );
     }
 

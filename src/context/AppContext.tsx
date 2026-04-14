@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { getErrorMessage } from "@/lib/errors";
 import {
   collectSessionPanes,
   createSessionPane,
@@ -61,8 +62,12 @@ interface AppContextType {
   ) => string;
   /** Swap the active pane's temporary sessionId for the real one and clear the connecting flag. */
   updateTabSession: (tabId: string, sessionId: string) => void;
+  /** Mark the active pane in a tab as failed while keeping the tab visible. */
+  markTabConnectionFailed: (tabId: string, error: string) => void;
   /** Update one specific pane's session binding. */
   updatePaneSession: (tabId: string, paneId: string, sessionId: string) => void;
+  /** Mark a specific pane as failed while keeping the layout intact. */
+  markPaneConnectionFailed: (tabId: string, paneId: string, error: string) => void;
   setActivePane: (tabId: string, paneId: string) => void;
   updateSplitRatio: (tabId: string, splitId: string, ratio: number) => void;
   splitPane: (
@@ -438,7 +443,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
         item.id === tabId
           ? {
               ...item,
-              root: updateSessionPane(item.root, paneId, { sessionId, connecting: false }),
+              root: updateSessionPane(item.root, paneId, {
+                sessionId,
+                connecting: false,
+                connectError: undefined,
+              }),
+            }
+          : item,
+      );
+      void commitTabs(nextTabs);
+    },
+    [commitTabs],
+  );
+
+  const markTabConnectionFailed = useCallback(
+    (tabId: string, error: string) => {
+      const tab = tabsRef.current.find((item) => item.id === tabId);
+      if (!tab) return;
+      const paneId = tab.activePaneId;
+      const nextTabs = tabsRef.current.map((item) =>
+        item.id === tabId
+          ? {
+              ...item,
+              root: updateSessionPane(item.root, paneId, {
+                connecting: false,
+                connectError: error,
+              }),
             }
           : item,
       );
@@ -453,7 +483,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
         tab.id === tabId
           ? {
               ...tab,
-              root: updateSessionPane(tab.root, paneId, { sessionId, connecting: false }),
+              root: updateSessionPane(tab.root, paneId, {
+                sessionId,
+                connecting: false,
+                connectError: undefined,
+              }),
+            }
+          : tab,
+      );
+      void commitTabs(nextTabs);
+    },
+    [commitTabs],
+  );
+
+  const markPaneConnectionFailed = useCallback(
+    (tabId: string, paneId: string, error: string) => {
+      const nextTabs = tabsRef.current.map((tab) =>
+        tab.id === tabId
+          ? {
+              ...tab,
+              root: updateSessionPane(tab.root, paneId, {
+                connecting: false,
+                connectError: error,
+              }),
             }
           : tab,
       );
@@ -662,14 +714,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
             switch (pane.type) {
               case "SSH":
                 if (!cid) {
-                  void closePane(tab.id, pane.id);
+                  markPaneConnectionFailed(tab.id, pane.id, "Missing SSH connection id");
                   return;
                 }
                 invoke<string>("create_ssh_session", { connectionId: cid })
                   .then((sessionId) => updatePaneSession(tab.id, pane.id, sessionId))
                   .catch((e) => {
                     logger.error(`Restore SSH failed for ${pane.name}`, e);
-                    closePane(tab.id, pane.id);
+                    markPaneConnectionFailed(tab.id, pane.id, getErrorMessage(e));
                   });
                 break;
               case "Local":
@@ -677,31 +729,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   .then((sessionId) => updatePaneSession(tab.id, pane.id, sessionId))
                   .catch((e) => {
                     logger.error("Restore Local failed", e);
-                    closePane(tab.id, pane.id);
+                    markPaneConnectionFailed(tab.id, pane.id, getErrorMessage(e));
                   });
                 break;
               case "Telnet":
                 if (!cid) {
-                  void closePane(tab.id, pane.id);
+                  markPaneConnectionFailed(tab.id, pane.id, "Missing Telnet connection id");
                   return;
                 }
                 invoke<string>("create_telnet_session", { connectionId: cid })
                   .then((sessionId) => updatePaneSession(tab.id, pane.id, sessionId))
                   .catch((e) => {
                     logger.error(`Restore Telnet failed for ${pane.name}`, e);
-                    closePane(tab.id, pane.id);
+                    markPaneConnectionFailed(tab.id, pane.id, getErrorMessage(e));
                   });
                 break;
               case "Serial":
                 if (!cid) {
-                  void closePane(tab.id, pane.id);
+                  markPaneConnectionFailed(tab.id, pane.id, "Missing Serial connection id");
                   return;
                 }
                 invoke<string>("create_serial_session", { connectionId: cid })
                   .then((sessionId) => updatePaneSession(tab.id, pane.id, sessionId))
                   .catch((e) => {
                     logger.error(`Restore Serial failed for ${pane.name}`, e);
-                    closePane(tab.id, pane.id);
+                    markPaneConnectionFailed(tab.id, pane.id, getErrorMessage(e));
                   });
                 break;
             }
@@ -709,7 +761,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         });
       }
     }
-  }, [appSettings, closePane, setActiveTabId, updatePaneSession]);
+  }, [appSettings, markPaneConnectionFailed, setActiveTabId, updatePaneSession]);
 
   return (
     <AppContext.Provider
@@ -720,7 +772,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addTab,
         addPendingTab,
         updateTabSession,
+        markTabConnectionFailed,
         updatePaneSession,
+        markPaneConnectionFailed,
         setActivePane,
         updateSplitRatio,
         splitPane,

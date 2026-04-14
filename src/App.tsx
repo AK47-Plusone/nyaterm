@@ -42,6 +42,7 @@ import { useApp } from "./context/AppContext";
 import { TransferProvider } from "./context/TransferContext";
 import { useGlobalShortcuts } from "./hooks/useGlobalShortcuts";
 import { useIdleLock } from "./hooks/useIdleLock";
+import { getErrorMessage } from "./lib/errors";
 import { invoke } from "./lib/invoke";
 import { logger } from "./lib/logger";
 import {
@@ -50,7 +51,6 @@ import {
   insertTabAfterInLeaf,
   insertTabIntoLeaf,
   reconcileTerminalWindows,
-  removeTabFromTerminalWindows,
   reorderTabsInLeaf,
   setLeafActiveTab,
   splitTerminalWindowForTab,
@@ -96,6 +96,12 @@ function canCreateSessionFromPane(
   return !!pane && (pane.type === "Local" || !!pane.connectionId);
 }
 
+function hasLiveSession<T extends Pick<SessionPane, "connecting" | "connectError">>(
+  pane: T | null | undefined,
+): pane is T {
+  return !!pane && !pane.connecting && !pane.connectError;
+}
+
 /** Determine which visual side (left/right) a given item currently lives on. */
 function getItemSide(id: string, layout: ActivityBarLayout): "left" | "right" | null {
   if (layout.left_top.includes(id) || layout.left_bottom.includes(id)) return "left";
@@ -123,7 +129,7 @@ function collectActiveShellSessionIds(
       if (!tab) continue;
 
       for (const pane of collectSessionPanes(tab.root)) {
-        if (!pane.connecting && pane.type === "SSH") {
+        if (hasLiveSession(pane) && pane.type === "SSH") {
           sessionIds.add(pane.sessionId);
         }
       }
@@ -146,9 +152,10 @@ function App() {
     addTab,
     addPendingTab,
     updateTabSession,
+    markTabConnectionFailed,
     updatePaneSession,
+    markPaneConnectionFailed,
     closePane,
-    closeTab,
     updateSplitRatio,
     persistTabsNow,
     updateUi,
@@ -298,9 +305,8 @@ function App() {
                   break;
               }
               updateTabSession(tabId, sessionId);
-            } catch {
-              setTerminalWindows((current) => removeTabFromTerminalWindows(current, tabId));
-              closeTab(tabId);
+            } catch (error) {
+              markTabConnectionFailed(tabId, getErrorMessage(error));
             }
           } catch {
             /* ignore */
@@ -314,7 +320,7 @@ function App() {
         p.then((unsub) => unsub());
       });
     };
-  }, [addTab, addPendingTab, updateTabSession, closeTab, updateAppSettings]);
+  }, [addTab, addPendingTab, markTabConnectionFailed, updateTabSession, updateAppSettings]);
 
   // Track modal child window open/close for overlay and focus enforcement.
   useEffect(() => {
@@ -498,8 +504,8 @@ function App() {
   );
 
   const closePaneBackendSession = useCallback(
-    async (pane: Pick<SessionPane, "connecting" | "sessionId">) => {
-      if (pane.connecting) {
+    async (pane: Pick<SessionPane, "connecting" | "connectError" | "sessionId">) => {
+      if (pane.connecting || pane.connectError) {
         return true;
       }
 
@@ -570,6 +576,7 @@ function App() {
   const handleHistoryCommand = useCallback(
     (command: string, execute: boolean = true) => {
       if (activePane && !activePane.connecting) {
+        if (activePane.connectError) return;
         const { sessionId } = activePane;
         import("@tauri-apps/api/core").then(({ invoke }) => {
           invoke("write_to_session", {
@@ -734,8 +741,7 @@ function App() {
           updateTabSession(tabId, sessionId);
         } catch (error) {
           logger.error("Failed to duplicate session", error);
-          setTerminalWindows((current) => removeTabFromTerminalWindows(current, tabId));
-          closeTab(tabId);
+          markTabConnectionFailed(tabId, getErrorMessage(error));
           toast.error(t("tabCtx.duplicateFailed"));
         }
       } catch (error) {
@@ -743,7 +749,7 @@ function App() {
         toast.error(t("tabCtx.duplicateFailed"));
       }
     },
-    [addPendingTab, closeTab, createSessionForPane, t, updateTabSession],
+    [addPendingTab, createSessionForPane, markTabConnectionFailed, t, updateTabSession],
   );
 
   const handleReconnectSession = useCallback(
@@ -835,14 +841,50 @@ function App() {
       } catch (error) {
         logger.error("Failed to create split session", error);
         if (newTabId) {
-          const failedTabId = newTabId;
-          setTerminalWindows((current) => removeTabFromTerminalWindows(current, failedTabId));
-          closeTab(failedTabId);
+          markTabConnectionFailed(newTabId, getErrorMessage(error));
         }
         toast.error(t("tabCtx.splitFailed"));
       }
     },
-    [addPendingTab, closeTab, createSessionForPane, t, terminalWindows, updateTabSession],
+    [
+      addPendingTab,
+      createSessionForPane,
+      markTabConnectionFailed,
+      setActiveTabId,
+      t,
+      terminalWindows,
+      updateTabSession,
+    ],
+  );
+
+  const handleReconnectPane = useCallback(
+    async (tabId: string, paneId: string) => {
+      const tab = tabs.find((item) => item.id === tabId);
+      const pane = tab
+        ? (collectSessionPanes(tab.root).find((item) => item.id === paneId) ?? null)
+        : null;
+      if (!pane || pane.connecting || !canCreateSessionFromPane(pane)) return;
+
+      try {
+        const closed = await closePaneBackendSession(pane);
+        if (!closed) {
+          throw new Error("close_session_failed");
+        }
+
+        const newSessionId = await createSessionForPane(pane);
+        updatePaneSession(tabId, paneId, newSessionId);
+      } catch (error) {
+        logger.error("Failed to reconnect pane", error);
+        markPaneConnectionFailed(tabId, paneId, getErrorMessage(error));
+      }
+    },
+    [
+      closePaneBackendSession,
+      createSessionForPane,
+      markPaneConnectionFailed,
+      tabs,
+      updatePaneSession,
+    ],
   );
 
   const handleCloseSession = useCallback(
@@ -956,7 +998,7 @@ function App() {
     async (tabId: string) => {
       const leaf = terminalWindows ? findTerminalWindowLeafByTabId(terminalWindows, tabId) : null;
       const tabOrder = leaf?.tabIds ?? tabs.map((tab) => tab.id);
-      const idx = tabOrder.findIndex((id) => id === tabId);
+      const idx = tabOrder.indexOf(tabId);
       if (idx === -1) return;
 
       const rightTabIds = tabOrder.slice(idx + 1);
@@ -1004,7 +1046,7 @@ function App() {
 
   // Recording toggle
   const handleToggleRecording = useCallback(async () => {
-    if (!activeTab || !activePane || activePane.connecting) return;
+    if (!activeTab || !activePane || activePane.connecting || activePane.connectError) return;
     const sessionId = activePane.sessionId;
     const isActive = recordingSessions.has(sessionId);
 
@@ -1219,7 +1261,7 @@ function App() {
         return;
       }
       if (id === "recording") {
-        if (!activePane || activePane.connecting) {
+        if (!activePane || activePane.connecting || activePane.connectError) {
           toast.error(t("panel.noActiveSessions"));
           return;
         }
@@ -1285,11 +1327,14 @@ function App() {
 
   // --- Panel content rendering (side-independent) ---
 
-  const activeSessionId = activePane?.connecting ? null : (activePane?.sessionId ?? null);
+  const activeSessionId =
+    activePane && !activePane.connecting && !activePane.connectError ? activePane.sessionId : null;
   const activeSshSessionId =
-    activePane && !activePane.connecting && activePane.type === "SSH" ? activePane.sessionId : null;
+    activePane && !activePane.connecting && !activePane.connectError && activePane.type === "SSH"
+      ? activePane.sessionId
+      : null;
   const activeSerialSessionId =
-    activePane && !activePane.connecting && activePane.type === "Serial"
+    activePane && !activePane.connecting && !activePane.connectError && activePane.type === "Serial"
       ? activePane.sessionId
       : null;
   const activeShellSessionIds = useMemo(
@@ -1319,7 +1364,11 @@ function App() {
             <div className="flex-1 min-h-0 overflow-hidden">
               <FileExplorer
                 activeSessionId={activeSessionId}
-                activeSessionType={activePane?.connecting ? null : (activePane?.type ?? null)}
+                activeSessionType={
+                  activePane && !activePane.connecting && !activePane.connectError
+                    ? activePane.type
+                    : null
+                }
               />
             </div>
             <ResizeHandle direction="vertical" onResize={handleTransferResize} />
@@ -1485,6 +1534,7 @@ function App() {
                   onActivatePane={handleActivatePane}
                   onUpdatePaneSplitRatio={handleUpdatePaneSplitRatio}
                   onUpdateWindowSplitRatio={handleUpdateWindowSplitRatio}
+                  onReconnectPane={handleReconnectPane}
                   onReconnected={handleReconnected}
                 />
               ) : (

@@ -38,6 +38,7 @@ export function createSessionPane(
     type,
     connectionId,
     connecting: overrides?.connecting,
+    connectError: overrides?.connectError,
   };
 }
 
@@ -85,7 +86,11 @@ export function findSessionPaneBySessionId(node: PaneNode, sessionId: string): S
   );
 }
 
-function updatePaneTree(node: PaneNode, paneId: string, updater: (current: PaneNode) => PaneNode): PaneNode {
+function updatePaneTree(
+  node: PaneNode,
+  paneId: string,
+  updater: (current: PaneNode) => PaneNode,
+): PaneNode {
   if (node.id === paneId) return updater(node);
   if (isSessionPane(node)) return node;
 
@@ -98,7 +103,12 @@ function updatePaneTree(node: PaneNode, paneId: string, updater: (current: PaneN
 export function updateSessionPane(
   root: PaneNode,
   paneId: string,
-  updates: Partial<Pick<SessionPane, "sessionId" | "name" | "type" | "connectionId" | "connecting">>,
+  updates: Partial<
+    Pick<
+      SessionPane,
+      "sessionId" | "name" | "type" | "connectionId" | "connecting" | "connectError"
+    >
+  >,
 ): PaneNode {
   return updatePaneTree(root, paneId, (current) =>
     isSessionPane(current) ? { ...current, ...updates } : current,

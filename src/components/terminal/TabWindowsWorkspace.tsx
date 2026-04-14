@@ -1,12 +1,12 @@
 import { memo, useMemo, useRef } from "react";
 import ResizeHandle from "@/components/layout/ResizeHandle";
-import type { PaneSplitDirection, Tab } from "@/types/global";
 import {
+  isTerminalWindowSplit,
   type TerminalWindowLeaf,
   type TerminalWindowNode,
   type TerminalWindowSplit,
-  isTerminalWindowSplit,
 } from "@/lib/tabWindows";
+import type { PaneSplitDirection, Tab } from "@/types/global";
 import PaneWorkspace from "./PaneWorkspace";
 import TabBar from "./TabBar";
 
@@ -30,6 +30,7 @@ interface TabWindowsWorkspaceProps {
   onActivatePane: (tabId: string, paneId: string) => void;
   onUpdatePaneSplitRatio: (tabId: string, splitId: string, ratio: number) => void;
   onUpdateWindowSplitRatio: (splitId: string, ratio: number) => void;
+  onReconnectPane?: (tabId: string, paneId: string) => void | Promise<void>;
   onReconnected?: (oldSessionId: string, newSessionId: string) => void;
 }
 
@@ -53,6 +54,7 @@ function SplitWindow({
   onActivatePane,
   onUpdatePaneSplitRatio,
   onUpdateWindowSplitRatio,
+  onReconnectPane,
   onReconnected,
 }: {
   split: TerminalWindowSplit;
@@ -62,8 +64,8 @@ function SplitWindow({
 
   const handleResize = (delta: number) => {
     const size = isHorizontal
-      ? containerRef.current?.clientHeight ?? 0
-      : containerRef.current?.clientWidth ?? 0;
+      ? (containerRef.current?.clientHeight ?? 0)
+      : (containerRef.current?.clientWidth ?? 0);
     if (size <= 0) return;
     onUpdateWindowSplitRatio(split.id, split.ratio + delta / size);
   };
@@ -71,9 +73,7 @@ function SplitWindow({
   return (
     <div
       ref={containerRef}
-      className={`flex h-full w-full min-h-0 min-w-0 ${
-        isHorizontal ? "flex-col" : "flex-row"
-      }`}
+      className={`flex h-full w-full min-h-0 min-w-0 ${isHorizontal ? "flex-col" : "flex-row"}`}
     >
       <div
         className="min-h-0 min-w-0"
@@ -99,6 +99,7 @@ function SplitWindow({
           onActivatePane={onActivatePane}
           onUpdatePaneSplitRatio={onUpdatePaneSplitRatio}
           onUpdateWindowSplitRatio={onUpdateWindowSplitRatio}
+          onReconnectPane={onReconnectPane}
           onReconnected={onReconnected}
         />
       </div>
@@ -124,6 +125,7 @@ function SplitWindow({
           onActivatePane={onActivatePane}
           onUpdatePaneSplitRatio={onUpdatePaneSplitRatio}
           onUpdateWindowSplitRatio={onUpdateWindowSplitRatio}
+          onReconnectPane={onReconnectPane}
           onReconnected={onReconnected}
         />
       </div>
@@ -150,6 +152,7 @@ function LeafWindow({
   onReorderTabs,
   onActivatePane,
   onUpdatePaneSplitRatio,
+  onReconnectPane,
   onReconnected,
 }: {
   leaf: TerminalWindowLeaf;
@@ -208,6 +211,7 @@ function LeafWindow({
               onActivatePane(tab.id, paneId);
             }}
             onUpdateSplitRatio={(splitId, ratio) => onUpdatePaneSplitRatio(tab.id, splitId, ratio)}
+            onReconnectPane={onReconnectPane}
             onReconnected={onReconnected}
           />
         ))}
@@ -236,6 +240,7 @@ function WindowNodeView({
   onActivatePane,
   onUpdatePaneSplitRatio,
   onUpdateWindowSplitRatio,
+  onReconnectPane,
   onReconnected,
 }: {
   node: TerminalWindowNode;
@@ -262,6 +267,7 @@ function WindowNodeView({
         onActivatePane={onActivatePane}
         onUpdatePaneSplitRatio={onUpdatePaneSplitRatio}
         onUpdateWindowSplitRatio={onUpdateWindowSplitRatio}
+        onReconnectPane={onReconnectPane}
         onReconnected={onReconnected}
       />
     );
@@ -287,6 +293,7 @@ function WindowNodeView({
       onReorderTabs={onReorderTabs}
       onActivatePane={onActivatePane}
       onUpdatePaneSplitRatio={onUpdatePaneSplitRatio}
+      onReconnectPane={onReconnectPane}
       onReconnected={onReconnected}
     />
   );
