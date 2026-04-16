@@ -1,5 +1,6 @@
 import type { IMarker, Terminal } from "@xterm/xterm";
 import { useRef } from "react";
+import { sanitizeTerminalCommand } from "@/lib/terminalCommand";
 
 export interface ShellIntegrationState {
   enabled: boolean;
@@ -58,21 +59,23 @@ export function useShellIntegration(
 
   const readCommandFromBuffer = (): string => {
     const terminal = terminalRef.current;
-    if (!terminal) return currentLineRef.current;
+    if (!terminal) return sanitizeTerminalCommand(currentLineRef.current);
     const si = shellIntegrationRef.current;
 
     try {
       if (si.enabled && si.commandStartMarker) {
-        return readBetweenMarkerAndCursor(terminal, si.commandStartMarker, si.commandStartX);
+        return sanitizeTerminalCommand(
+          readBetweenMarkerAndCursor(terminal, si.commandStartMarker, si.commandStartX),
+        );
       }
 
       const buf = terminal.buffer.active;
       const row = buf.baseY + buf.cursorY;
       const line = buf.getLine(row);
-      if (!line) return currentLineRef.current;
-      return line.translateToString(true, si.fallbackPromptEndX);
+      if (!line) return sanitizeTerminalCommand(currentLineRef.current);
+      return sanitizeTerminalCommand(line.translateToString(true, si.fallbackPromptEndX));
     } catch {
-      return currentLineRef.current;
+      return sanitizeTerminalCommand(currentLineRef.current);
     }
   };
 

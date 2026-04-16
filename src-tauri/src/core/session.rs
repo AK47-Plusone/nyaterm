@@ -9,7 +9,9 @@ use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
+use std::time::Duration;
 use tauri::Emitter;
 use tokio::sync::{mpsc, Mutex};
 
@@ -103,8 +105,8 @@ pub struct SessionHandle {
 /// Central registry of sessions, history, and fuzzy search store.
 pub struct SessionManager {
     pub sessions: Arc<Mutex<HashMap<String, SessionHandle>>>,
-    pub command_history: Arc<Mutex<HashMap<String, Vec<String>>>>,
     pub history_store: Arc<Mutex<CommandHistoryStore>>,
+    history_save_scheduled: Arc<AtomicBool>,
     app_handle: OnceLock<tauri::AppHandle>,
 }
 
@@ -113,8 +115,8 @@ impl SessionManager {
     pub fn new() -> Self {
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
-            command_history: Arc::new(Mutex::new(HashMap::new())),
             history_store: Arc::new(Mutex::new(CommandHistoryStore::new())),
+            history_save_scheduled: Arc::new(AtomicBool::new(false)),
             app_handle: OnceLock::new(),
         }
     }
@@ -133,19 +135,17 @@ impl SessionManager {
         }
     }
 
-    /// Registers a new session and allocates empty command history.
+    /// Registers a new active session.
     pub async fn add_session(&self, handle: SessionHandle) {
         let id = handle.info.id.clone();
-        self.sessions.lock().await.insert(id.clone(), handle);
-        self.command_history.lock().await.insert(id, Vec::new());
+        self.sessions.lock().await.insert(id, handle);
         if let Some(app) = self.app_handle.get() {
             let _ = app.emit("sessions-changed", ());
         }
     }
 
-    /// Removes session and its history; returns true if the session existed.
+    /// Removes a session; returns true if the session existed.
     pub async fn remove_session(&self, id: &str) -> bool {
-        self.command_history.lock().await.remove(id);
         let removed = self.sessions.lock().await.remove(id).is_some();
         if removed {
             if let Some(app) = self.app_handle.get() {
@@ -177,34 +177,60 @@ impl SessionManager {
         sessions.values().map(|h| h.info.clone()).collect()
     }
 
-    /// Appends a command to per-session history and persists to the fuzzy store.
-    pub async fn add_command(&self, session_id: &str, command: String) {
-        {
-            let mut history = self.command_history.lock().await;
-            if let Some(cmds) = history.get_mut(session_id) {
-                cmds.push(command.clone());
-            }
-        }
-        {
+    /// Appends a command to persistent history and schedules a coalesced save.
+    pub async fn add_command(&self, _session_id: &str, command: String) {
+        let changed = {
             let mut store = self.history_store.lock().await;
-            store.add(command);
-            if let Err(e) = store.save() {
-                tracing::warn!("Failed to save command history: {}", e);
-            }
+            store.add(command)
+        };
+
+        if !changed {
+            return;
         }
+
+        self.schedule_history_save();
         if let Some(app) = self.app_handle.get() {
             let _ = app.emit("command-history-changed", ());
         }
     }
 
-    /// Returns all commands from all sessions (for history UI).
-    pub async fn get_all_history(&self) -> Vec<String> {
-        let history = self.command_history.lock().await;
-        let mut all: Vec<String> = Vec::new();
-        for cmds in history.values() {
-            all.extend(cmds.iter().cloned());
+    fn schedule_history_save(&self) {
+        if self.history_save_scheduled.swap(true, Ordering::SeqCst) {
+            return;
         }
-        all
+
+        let history_store = self.history_store.clone();
+        let history_save_scheduled = self.history_save_scheduled.clone();
+        tauri::async_runtime::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+
+                {
+                    let mut store = history_store.lock().await;
+                    if let Err(err) = store.save() {
+                        tracing::warn!("Failed to save command history: {}", err);
+                    }
+                }
+
+                history_save_scheduled.store(false, Ordering::SeqCst);
+
+                let needs_reschedule = {
+                    let store = history_store.lock().await;
+                    store.is_dirty()
+                };
+                if needs_reschedule && !history_save_scheduled.swap(true, Ordering::SeqCst) {
+                    continue;
+                }
+
+                break;
+            }
+        });
+    }
+
+    /// Returns persistent history in stable most-recent-first order.
+    pub async fn get_all_history(&self) -> Vec<String> {
+        let store = self.history_store.lock().await;
+        store.list()
     }
 
     /// Fuzzy searches command history; returns top `limit` matches by score.
