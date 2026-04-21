@@ -1069,6 +1069,11 @@ fn elapsed_ms(duration: Duration) -> u64 {
 }
 
 fn map_storage_error(error: opendal::Error) -> AppError {
+    let raw = error.to_string();
+    if let Some(message) = map_webdav_auth_error(&raw) {
+        return AppError::Config(message);
+    }
+
     let label = match error.kind() {
         ErrorKind::NotFound => "not found",
         ErrorKind::PermissionDenied => "permission denied",
@@ -1077,7 +1082,22 @@ fn map_storage_error(error: opendal::Error) -> AppError {
         ErrorKind::RateLimited => "rate limited",
         _ => "unexpected error",
     };
-    AppError::Config(format!("cloud storage {label}: {error}"))
+    AppError::Config(format!("cloud storage {label}: {raw}"))
+}
+
+fn map_webdav_auth_error(raw: &str) -> Option<String> {
+    let lower = raw.to_ascii_lowercase();
+    let is_webdav = lower.contains("service: webdav");
+    let is_unauthorized = lower.contains("status: 401") || lower.contains("401 unauthorized");
+
+    if is_webdav && is_unauthorized {
+        return Some(
+            "WebDAV authentication failed (401 Unauthorized). Dragonfly currently supports WebDAV Basic/Bearer authentication only and does not support Apache Digest auth. If you are using bytemark/webdav, change AUTH_TYPE to Basic and prefer HTTPS; otherwise verify the username and password."
+                .to_string(),
+        );
+    }
+
+    None
 }
 
 fn log_history_entry(entry: &CloudSyncHistoryEntry) {
@@ -1219,7 +1239,7 @@ pub async fn notify_config_changed(app: &tauri::AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::{remote_path, CloudSyncManager};
+    use super::{map_webdav_auth_error, remote_path, CloudSyncManager};
     use crate::config::{CloudSyncSettings, S3SyncSettings, WebdavSyncSettings};
 
     #[test]
@@ -1264,5 +1284,24 @@ mod tests {
         assert_eq!(settings.provider, "webdav");
         assert!(settings.webdav.password.is_some());
         assert!(settings.s3.secret_access_key.is_some());
+    }
+
+    #[test]
+    fn webdav_401_error_reports_digest_hint() {
+        let message = map_webdav_auth_error(
+            "Unexpected (persistent) at stat, context: { service: webdav, response: Parts { status: 401 } } => 401 Unauthorized",
+        );
+
+        assert!(message.is_some());
+        assert!(message.unwrap().contains("does not support Apache Digest auth"));
+    }
+
+    #[test]
+    fn non_webdav_error_does_not_report_digest_hint() {
+        let message = map_webdav_auth_error(
+            "Unexpected (persistent) at stat, context: { service: s3, response: Parts { status: 401 } } => 401 Unauthorized",
+        );
+
+        assert!(message.is_none());
     }
 }
