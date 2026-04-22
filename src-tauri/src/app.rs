@@ -64,25 +64,43 @@ pub fn setup(
         }
     });
 
-    let _tray = tauri::tray::TrayIconBuilder::new()
-        .icon(app.default_window_icon().unwrap().clone())
-        .tooltip("Dragonfly")
-        .on_tray_icon_event(|tray, event| match event {
-            tauri::tray::TrayIconEvent::Click {
-                button: tauri::tray::MouseButton::Left,
-                button_state: tauri::tray::MouseButtonState::Up,
-                ..
-            } => {
-                if let Some(window) = tray.app_handle().get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
-            }
-            _ => {}
-        })
-        .build(app)?;
+    crate::tray::setup(app)?;
 
     Ok(())
+}
+
+pub fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        if window.is_minimized().unwrap_or(false) {
+            let _ = window.unminimize();
+        }
+        let _ = window.show();
+        let _ = window.set_focus();
+        crate::tray::schedule_refresh(app);
+    }
+}
+
+pub fn hide_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
+        crate::tray::schedule_refresh(app);
+    }
+}
+
+pub fn prepare_app_shutdown(app: &tauri::AppHandle) {
+    let session_manager = app.state::<Arc<SessionManager>>();
+    session_manager.flush_history_before_shutdown();
+
+    for label in &["settings", "new-session", "quick-command"] {
+        if let Some(child) = app.get_webview_window(label) {
+            let _ = child.close();
+        }
+    }
+}
+
+pub fn quit_application(app: &tauri::AppHandle) {
+    prepare_app_shutdown(app);
+    app.exit(0);
 }
 
 pub fn on_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
@@ -90,20 +108,13 @@ pub fn on_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
         if window.label() == "main" {
             if let Ok(settings) = crate::config::load_app_settings(window.app_handle()) {
                 if settings.general.minimize_to_tray {
-                    let _ = window.hide();
+                    hide_main_window(window.app_handle());
                     api.prevent_close();
                     return;
                 }
             }
 
-            let session_manager = window.state::<Arc<SessionManager>>();
-            session_manager.flush_history_before_shutdown();
-
-            for label in &["settings", "new-session", "quick-command"] {
-                if let Some(child) = window.app_handle().get_webview_window(label) {
-                    let _ = child.close();
-                }
-            }
+            prepare_app_shutdown(window.app_handle());
         }
     }
 }

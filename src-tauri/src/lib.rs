@@ -6,6 +6,7 @@ mod config;
 mod core;
 mod error;
 mod observability;
+mod tray;
 mod utils;
 
 use std::sync::Arc;
@@ -36,6 +37,7 @@ pub fn run() {
         .setup(move |a| app::setup(a, session_manager, quick_commands_store, cloud_sync_manager))
         .on_window_event(app::on_window_event)
         .invoke_handler(tauri::generate_handler![
+            cmd::app::quit_application,
             cmd::clipboard::read_clipboard_text,
             cmd::log::append_frontend_logs,
             cmd::log::export_diagnostics,

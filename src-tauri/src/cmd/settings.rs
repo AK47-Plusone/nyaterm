@@ -4,6 +4,7 @@ use crate::error::AppResult;
 use crate::observability::{self, StructuredLog, StructuredLogLevel};
 use crate::utils::crypto;
 use std::sync::Arc;
+use tauri::Emitter;
 
 fn schedule_cloud_sync_notify(app: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
@@ -47,9 +48,17 @@ pub fn get_master_password_value(app: tauri::AppHandle) -> AppResult<Option<Stri
 pub async fn save_app_settings(
     app: tauri::AppHandle,
     manager: tauri::State<'_, Arc<CloudSyncManager>>,
+    settings: config::AppSettings,
+) -> AppResult<()> {
+    persist_app_settings(&app, manager.inner(), settings).await
+}
+
+pub async fn persist_app_settings(
+    app: &tauri::AppHandle,
+    manager: &Arc<CloudSyncManager>,
     mut settings: config::AppSettings,
 ) -> AppResult<()> {
-    let existing = match config::load_app_settings(&app) {
+    let existing = match config::load_app_settings(app) {
         Ok(existing) => existing,
         Err(error) => {
             observability::log_event(StructuredLog {
@@ -100,7 +109,7 @@ pub async fn save_app_settings(
     let mut persisted_settings = settings.clone();
     persisted_settings.cloud_sync = config::encrypt_cloud_sync_settings(merged_cloud_sync.clone())?;
 
-    if let Err(error) = config::save_app_settings(&app, &persisted_settings) {
+    if let Err(error) = config::save_app_settings(app, &persisted_settings) {
         observability::log_event(StructuredLog {
             level: StructuredLogLevel::Error,
             domain: "settings.persistence".to_string(),
@@ -119,6 +128,8 @@ pub async fn save_app_settings(
 
     manager.replace_settings(merged_cloud_sync).await?;
     schedule_cloud_sync_notify(app.clone());
+    let _ = app.emit("settings-changed", ());
+    crate::tray::schedule_refresh(app);
 
     Ok(())
 }

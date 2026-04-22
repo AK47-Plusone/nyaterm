@@ -184,6 +184,7 @@ impl SessionManager {
         );
         if let Some(app) = self.app_handle.get() {
             let _ = app.emit("sessions-changed", ());
+            crate::tray::schedule_refresh(app);
         }
     }
 
@@ -197,6 +198,7 @@ impl SessionManager {
         if removed {
             if let Some(app) = self.app_handle.get() {
                 let _ = app.emit("sessions-changed", ());
+                crate::tray::schedule_refresh(app);
             }
         }
         removed
@@ -426,13 +428,8 @@ impl SessionManager {
             .iter()
             .map(|command| (command.as_str(), command.as_str()))
             .collect();
-        let pending_results = fuzzy_search_items(
-            &pending_refs,
-            pattern,
-            "history",
-            limit,
-            max_command_length,
-        );
+        let pending_results =
+            fuzzy_search_items(&pending_refs, pattern, "history", limit, max_command_length);
         let mut existing = results
             .iter()
             .map(|result| result.command.clone())

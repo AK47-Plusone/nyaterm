@@ -916,6 +916,7 @@ impl CloudSyncManager {
         *self.status.lock().await = status.clone();
         let _ = app.emit("cloud-sync-status-changed", &status);
         let _ = app.emit("cloud-sync-conflict", &conflict);
+        crate::tray::schedule_refresh(&app);
     }
 
     fn app(&self) -> AppResult<tauri::AppHandle> {
@@ -1293,7 +1294,9 @@ mod tests {
         );
 
         assert!(message.is_some());
-        assert!(message.unwrap().contains("does not support Apache Digest auth"));
+        assert!(message
+            .unwrap()
+            .contains("does not support Apache Digest auth"));
     }
 
     #[test]
