@@ -1,3 +1,4 @@
+import React, {useCallback, useEffect, useState} from 'react';
 import clsx from 'clsx';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import useBaseUrl from '@docusaurus/useBaseUrl';
@@ -8,166 +9,487 @@ import Translate, {translate} from '@docusaurus/Translate';
 
 import styles from './index.module.css';
 
-const features = [
+type FeatureTab = {
+  value: string;
+  label: string;
+  title: string;
+  description: string;
+  bullets: string[];
+  lightImage: string;
+  darkImage: string;
+};
+
+type SummaryCard = {
+  title: string;
+  description: string;
+};
+
+type DownloadPlatform = {
+  key: string;
+  href: string;
+};
+
+const downloadPlatforms: DownloadPlatform[] = [
   {
-    title: <Translate>安全高效的 SSH 连接</Translate>,
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={styles.featureSvg}>
-        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-        <circle cx="12" cy="16" r="1" />
-      </svg>
-    ),
-    description: (
-      <Translate>
-        基于 Rust russh 库构建，提供安全、高性能的 SSH 连接。支持密码和密钥认证、代理转发、TOFU 主机密钥验证。
-      </Translate>
-    ),
+    key: 'windows-x86_64',
+    href: 'https://dragonfly.coderkang.top/download/windows-x86_64',
   },
   {
-    title: <Translate>集成 SFTP 文件管理</Translate>,
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={styles.featureSvg}>
-        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-        <line x1="12" y1="11" x2="12" y2="17" />
-        <polyline points="9 14 12 11 15 14" />
-      </svg>
-    ),
-    description: (
-      <Translate>
-        内置文件浏览器，直接在侧边栏管理远程文件。支持上传、下载、重命名、权限修改等操作，传输进度实时可见。
-      </Translate>
-    ),
+    key: 'linux-x86_64',
+    href: 'https://dragonfly.coderkang.top/download/linux-x86_64',
   },
   {
-    title: <Translate>多标签终端界面</Translate>,
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={styles.featureSvg}>
-        <polyline points="4 17 10 11 4 5" />
-        <line x1="12" y1="19" x2="20" y2="19" />
-      </svg>
-    ),
-    description: (
-      <Translate>
-        同时管理多个 SSH 和本地终端会话。支持 WebGL 硬件加速渲染、自定义字体、关键词高亮、命令历史模糊搜索。
-      </Translate>
-    ),
+    key: 'darwin-x86_64',
+    href: 'https://dragonfly.coderkang.top/download/darwin-x86_64',
   },
   {
-    title: <Translate>加密同步与备份</Translate>,
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={styles.featureSvg}>
-        <path d="M12 3v12" />
-        <path d="m7 10 5 5 5-5" />
-        <path d="M5 19h14" />
-      </svg>
-    ),
-    description: (
-      <Translate>
-        通过 WebDAV 或 S3 兼容存储同步 Dragonfly 的可移植配置，并为连接、凭据和常用设置创建可恢复的加密备份快照。
-      </Translate>
-    ),
+    key: 'darwin-aarch64',
+    href: 'https://dragonfly.coderkang.top/download/darwin-aarch64',
   },
-  {
-    title: <Translate>高度可定制</Translate>,
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={styles.featureSvg}>
-        <circle cx="12" cy="12" r="3" />
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-      </svg>
-    ),
-    description: (
-      <Translate>
-        深色/浅色主题切换、可调整面板布局、快捷命令管理、多语言翻译、快捷键自定义，打造专属工作流。
-      </Translate>
-    ),
+];
+
+const featureAutoplayStoppedKey = 'dragonfly-home-feature-tabs-autoplay-stopped';
+const featureAutoplayIntervalMs = 4200;
+
+function detectDownloadPlatform(): DownloadPlatform {
+  if (typeof navigator === 'undefined') {
+    return downloadPlatforms[0];
   }
-];
 
-const techStack = [
-  { name: 'Tauri 2', color: '#FFC131' },
-  { name: 'React 19', color: '#61DAFB' },
-  { name: 'Rust', color: '#DEA584' },
-  { name: 'TypeScript', color: '#3178C6' },
-  { name: 'xterm.js', color: '#0EAD69' },
-];
+  const platform = navigator.platform.toLowerCase();
+  const userAgent = navigator.userAgent.toLowerCase();
 
-function HomepageHeader() {
-  const {siteConfig} = useDocusaurusContext();
-  const logoUrl = useBaseUrl('/img/logo.svg');
-  return (
-    <header className={styles.heroBanner}>
-      <div className={styles.heroInner}>
-        <div className={styles.heroLogoWrapper}>
-          <img
-            src={logoUrl}
-            alt="Dragonfly Logo"
-            className={styles.heroLogo}
-          />
-        </div>
-        <Heading as="h1" className={styles.heroTitle}>
-          {siteConfig.title}
-        </Heading>
-        <p className={styles.heroSubtitle}>
-          <Translate>现代高性能 SSH 客户端</Translate>
-        </p>
-        <p className={styles.heroDescription}>
-          <Translate>
-            基于 Tauri 和 React 构建，跨平台、安全、快速
-          </Translate>
-        </p>
-        <div className={styles.heroButtons}>
-          <Link
-            className={clsx('button button--lg', styles.btnPrimary)}
-            to="/docs/getting-started/installation">
-            <Translate>快速开始</Translate>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={styles.btnIcon}>
-              <line x1="5" y1="12" x2="19" y2="12" />
-              <polyline points="12 5 19 12 12 19" />
-            </svg>
-          </Link>
-          <Link
-            className={clsx('button button--lg', styles.btnSecondary)}
-            href="https://git.coderkang.top/Tauri/dragonfly">
-            <svg viewBox="0 0 24 24" fill="currentColor" className={styles.btnGithubIcon}>
-              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z" />
-            </svg>
-            GitHub
-          </Link>
-        </div>
-        <div className={styles.techBadges}>
-          {techStack.map((tech) => (
-            <span key={tech.name} className={styles.techBadge}>
-              <span className={styles.techDot} style={{backgroundColor: tech.color}} />
-              {tech.name}
-            </span>
-          ))}
-        </div>
-      </div>
-      <div className={styles.heroGlow} />
-    </header>
-  );
+  if (platform.includes('mac') || userAgent.includes('mac os')) {
+    return downloadPlatforms.find((item) => item.key === 'darwin-x86_64') ?? downloadPlatforms[0];
+  }
+
+  if (platform.includes('linux') || userAgent.includes('linux')) {
+    return downloadPlatforms.find((item) => item.key === 'linux-x86_64') ?? downloadPlatforms[0];
+  }
+
+  return downloadPlatforms[0];
 }
 
-function Feature({title, icon, description}: {title: React.ReactNode; icon: React.ReactNode; description: React.ReactNode}) {
+function getDownloadPlatformLabel(key: DownloadPlatform['key']) {
+  switch (key) {
+    case 'windows-x86_64':
+      return translate({message: 'Windows x86_64'});
+    case 'linux-x86_64':
+      return translate({message: 'Linux x86_64'});
+    case 'darwin-x86_64':
+      return translate({message: 'macOS Intel'});
+    case 'darwin-aarch64':
+      return translate({message: 'macOS Apple Silicon'});
+    default:
+      return key;
+  }
+}
+
+function DownloadButton() {
+  const [platform, setPlatform] = useState<DownloadPlatform>(downloadPlatforms[0]);
+
+  useEffect(() => {
+    const detectedPlatform = detectDownloadPlatform();
+    setPlatform(detectedPlatform);
+
+    const userAgentData = (
+      navigator as Navigator & {
+        userAgentData?: {
+          platform?: string;
+          getHighEntropyValues?: (hints: string[]) => Promise<{architecture?: string; platform?: string}>;
+        };
+      }
+    ).userAgentData;
+
+    const entropyPromise = userAgentData?.getHighEntropyValues?.(['architecture', 'platform']);
+
+    entropyPromise
+      ?.then((values) => {
+        const detectedOs = values.platform?.toLowerCase() ?? userAgentData.platform?.toLowerCase() ?? '';
+        const architecture = values.architecture?.toLowerCase() ?? '';
+
+        if (detectedOs.includes('mac') && ['arm', 'arm64', 'aarch64'].includes(architecture)) {
+          const appleSilicon = downloadPlatforms.find((item) => item.key === 'darwin-aarch64');
+          if (appleSilicon) {
+            setPlatform(appleSilicon);
+          }
+        }
+      })
+      .catch(() => {
+        // The synchronous detector above is sufficient when high entropy hints are unavailable.
+      });
+  }, []);
+
   return (
-    <div className={styles.featureCard}>
-      <div className={styles.featureIconWrapper}>
-        {icon}
-      </div>
-      <Heading as="h3" className={styles.featureTitle}>{title}</Heading>
-      <p className={styles.featureDescription}>{description}</p>
+    <div className={styles.downloadGroup}>
+      <a className={clsx('button button--lg', styles.secondaryButton, styles.downloadPrimary)} href={platform.href}>
+        <Translate>下载</Translate>
+        <span className={styles.downloadPlatform}>{getDownloadPlatformLabel(platform.key)}</span>
+      </a>
+      <details className={styles.downloadMenu}>
+        <summary className={styles.downloadMenuToggle} aria-label={translate({message: '选择下载平台'})}>
+          <span />
+        </summary>
+        <div className={styles.downloadMenuList}>
+          {downloadPlatforms.map((item) => (
+            <a key={item.key} className={styles.downloadMenuItem} href={item.href}>
+              {getDownloadPlatformLabel(item.key)}
+            </a>
+          ))}
+        </div>
+      </details>
     </div>
   );
 }
 
-function HomepageFeatures() {
+function FeaturePreview({
+  title,
+  lightImage,
+  darkImage,
+}: {
+  title: string;
+  lightImage: string;
+  darkImage: string;
+}) {
+  const lightImageUrl = useBaseUrl(lightImage);
+  const darkImageUrl = useBaseUrl(darkImage);
+
   return (
-    <section className={styles.features}>
+    <div className={styles.featurePreview} aria-label={title}>
+      <div className={clsx(styles.featurePreviewImageSlot, styles.featurePreviewLight)}>
+        <img
+          className={styles.featurePreviewImage}
+          src={lightImageUrl}
+          alt={translate({message: 'Dragonfly 日间主题功能截图'})}
+        />
+      </div>
+      <div className={clsx(styles.featurePreviewImageSlot, styles.featurePreviewDark)}>
+        <img
+          className={styles.featurePreviewImage}
+          src={darkImageUrl}
+          alt={translate({message: 'Dragonfly 夜间主题功能截图'})}
+        />
+      </div>
+    </div>
+  );
+}
+
+function HeroPreview({
+  lightImage,
+  darkImage,
+}: {
+  lightImage: string;
+  darkImage: string;
+}) {
+  const lightImageUrl = useBaseUrl(lightImage);
+  const darkImageUrl = useBaseUrl(darkImage);
+
+  return (
+    <div className={styles.heroPreview} aria-label={translate({message: '产品截图预览'})}>
+      <div className={styles.heroScreenshotStage}>
+        <div className={clsx(styles.heroScreenshotSlot, styles.heroScreenshotLight)}>
+          <img
+            className={styles.heroScreenshotImage}
+            src={lightImageUrl}
+            alt={translate({message: 'Dragonfly 日间主题产品截图'})}
+          />
+        </div>
+        <div className={clsx(styles.heroScreenshotSlot, styles.heroScreenshotDark)}>
+          <img
+            className={styles.heroScreenshotImage}
+            src={darkImageUrl}
+            alt={translate({message: 'Dragonfly 夜间主题产品截图'})}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HomepageHeader() {
+  const {siteConfig} = useDocusaurusContext();
+  const logoUrl = useBaseUrl('/img/logo.svg');
+
+  const badges = [
+    translate({message: 'SSH'}),
+    translate({message: 'Local Shell'}),
+    translate({message: 'Telnet / Serial'}),
+    translate({message: 'SFTP'}),
+    translate({message: 'WebDAV / S3'}),
+  ];
+
+  return (
+    <header className={styles.heroBanner}>
       <div className="container">
-        <div className={styles.featureGrid}>
-          {features.map((props, idx) => (
-            <Feature key={idx} {...props} />
+        <div className={styles.heroInner}>
+          <div className={styles.heroCopy}>
+            <div className={styles.heroBrandRow}>
+              <img src={logoUrl} alt="Dragonfly Logo" className={styles.heroLogo} />
+              <div className={styles.heroBrandText}>
+                <Heading as="h1" className={styles.heroTitle}>
+                  {siteConfig.title}
+                </Heading>
+              </div>
+            </div>
+
+            <p className={styles.heroSubtitle}>
+              <Translate>用于 SSH、串口和本地命令行工作的桌面终端客户端。</Translate>
+            </p>
+            <p className={styles.heroDescription}>
+              <Translate>
+                Dragonfly 将终端会话、远程文件、认证信息、端口转发和配置备份放在同一个桌面应用中，适合日常开发、服务器维护和设备调试。
+              </Translate>
+            </p>
+
+            <div className={styles.heroButtons}>
+              <Link
+                className={clsx('button button--lg', styles.primaryButton)}
+                to="/docs/getting-started/quick-start">
+                <Translate>快速开始</Translate>
+              </Link>
+              <DownloadButton />
+            </div>
+
+            <div className={styles.heroBadges}>
+              {badges.map((badge) => (
+                <span key={badge} className={styles.heroBadge}>
+                  {badge}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <HeroPreview lightImage="/img/home/product-light.png" darkImage="/img/home/product-dark.png" />
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function FeaturesSection({features}: {features: FeatureTab[]}) {
+  const [activeValue, setActiveValue] = useState(features[0]?.value ?? '');
+  const [autoplayStopped, setAutoplayStopped] = useState(false);
+
+  const activeIndex = Math.max(
+    0,
+    features.findIndex((feature) => feature.value === activeValue),
+  );
+  const activeFeature = features[activeIndex] ?? features[0];
+  const isAutoplaying = !autoplayStopped && features.length > 1;
+
+  const stopAutoplay = useCallback(() => {
+    setAutoplayStopped(true);
+
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(featureAutoplayStoppedKey, 'true');
+    }
+  }, []);
+
+  const selectFeature = useCallback(
+    (value: string) => {
+      stopAutoplay();
+      setActiveValue(value);
+    },
+    [stopAutoplay],
+  );
+
+  const selectFeatureByOffset = useCallback(
+    (offset: number) => {
+      const nextIndex = (activeIndex + offset + features.length) % features.length;
+      const nextValue = features[nextIndex]?.value;
+
+      if (nextValue) {
+        selectFeature(nextValue);
+      }
+    },
+    [activeIndex, features, selectFeature],
+  );
+
+  useEffect(() => {
+    if (typeof sessionStorage === 'undefined') {
+      return;
+    }
+
+    setAutoplayStopped(sessionStorage.getItem(featureAutoplayStoppedKey) === 'true');
+  }, []);
+
+  useEffect(() => {
+    if (!features.some((feature) => feature.value === activeValue)) {
+      setActiveValue(features[0]?.value ?? '');
+    }
+  }, [activeValue, features]);
+
+  useEffect(() => {
+    if (autoplayStopped) {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+    if (mediaQuery?.matches) {
+      setAutoplayStopped(true);
+      return;
+    }
+
+    const stopOnUserAction = () => stopAutoplay();
+    const listenerOptions: AddEventListenerOptions = {passive: true};
+
+    window.addEventListener('pointerdown', stopOnUserAction, listenerOptions);
+    window.addEventListener('keydown', stopOnUserAction);
+    window.addEventListener('wheel', stopOnUserAction, listenerOptions);
+    window.addEventListener('touchstart', stopOnUserAction, listenerOptions);
+
+    return () => {
+      window.removeEventListener('pointerdown', stopOnUserAction);
+      window.removeEventListener('keydown', stopOnUserAction);
+      window.removeEventListener('wheel', stopOnUserAction);
+      window.removeEventListener('touchstart', stopOnUserAction);
+    };
+  }, [autoplayStopped, stopAutoplay]);
+
+  useEffect(() => {
+    if (!isAutoplaying) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setActiveValue((currentValue) => {
+        const currentIndex = features.findIndex((feature) => feature.value === currentValue);
+        const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % features.length : 0;
+        return features[nextIndex]?.value ?? currentValue;
+      });
+    }, featureAutoplayIntervalMs);
+
+    return () => window.clearInterval(intervalId);
+  }, [features, isAutoplaying]);
+
+  if (!activeFeature) {
+    return null;
+  }
+
+  return (
+    <section id="features" className={styles.featuresSection}>
+      <div className="container">
+        <div className={styles.featureShowcase}>
+          <div className={styles.featureTabs} role="tablist" aria-label={translate({message: '功能展示'})}>
+            {features.map((feature, index) => {
+              const isActive = feature.value === activeFeature.value;
+
+              return (
+                <button
+                  key={feature.value}
+                  type="button"
+                  role="tab"
+                  id={`feature-tab-${feature.value}`}
+                  aria-controls={`feature-panel-${feature.value}`}
+                  aria-selected={isActive}
+                  className={clsx(styles.featureTab, isActive && styles.featureTabActive)}
+                  onClick={() => selectFeature(feature.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+                      event.preventDefault();
+                      selectFeatureByOffset(1);
+                    }
+
+                    if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+                      event.preventDefault();
+                      selectFeatureByOffset(-1);
+                    }
+
+                    if (event.key === 'Home') {
+                      event.preventDefault();
+                      selectFeature(features[0]?.value ?? feature.value);
+                    }
+
+                    if (event.key === 'End') {
+                      event.preventDefault();
+                      selectFeature(features[features.length - 1]?.value ?? feature.value);
+                    }
+                  }}>
+                  <span className={styles.featureTabIndex}>{String(index + 1).padStart(2, '0')}</span>
+                  <span className={styles.featureTabText}>
+                    <span className={styles.featureTabLabel}>{feature.label}</span>
+                    <span className={styles.featureTabHint}>{feature.title}</span>
+                  </span>
+                  <span className={styles.featureTabArrow} aria-hidden="true" />
+                  {isActive && isAutoplaying ? <span className={styles.featureTabProgress} /> : null}
+                </button>
+              );
+            })}
+          </div>
+
+          <div
+            role="tabpanel"
+            id={`feature-panel-${activeFeature.value}`}
+            aria-labelledby={`feature-tab-${activeFeature.value}`}
+            className={styles.featurePanel}>
+            <div className={styles.featureCopy}>
+              <Heading as="h2" className={styles.featureTitle}>
+                {activeFeature.title}
+              </Heading>
+              <p className={styles.featureDescription}>{activeFeature.description}</p>
+              <ul className={styles.featureList}>
+                {activeFeature.bullets.map((bullet) => (
+                  <li key={bullet} className={styles.featureListItem}>
+                    {bullet}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <FeaturePreview
+              title={activeFeature.title}
+              lightImage={activeFeature.lightImage}
+              darkImage={activeFeature.darkImage}
+            />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function JourneySection() {
+  const steps = [
+    {
+      title: translate({message: '安装并建立第一个连接'}),
+      description: translate({message: '了解安装方式、创建连接和进入工作区的基本流程。'}),
+      to: '/docs/getting-started/quick-start',
+      label: translate({message: '查看快速开始'}),
+    },
+    {
+      title: translate({message: '按功能查阅使用说明'}),
+      description: translate({message: '查看 SSH、SFTP、终端操作、OTP、主题、代理和同步备份的具体用法。'}),
+      to: '/docs/',
+      label: translate({message: '查看文档'}),
+    },
+    {
+      title: translate({message: '查看版本变化'}),
+      description: translate({message: '了解各版本新增功能、行为调整和需要注意的兼容性变化。'}),
+      to: '/changelog',
+      label: translate({message: '查看更新记录'}),
+    },
+  ];
+
+  return (
+    <section className={styles.journeySection}>
+      <div className="container">
+        <div className={styles.sectionHeading}>
+          <Heading as="h2" className={styles.sectionTitle}>
+            <Translate>继续了解 Dragonfly</Translate>
+          </Heading>
+        </div>
+
+        <div className={styles.journeyGrid}>
+          {steps.map((step) => (
+            <article key={step.title} className={styles.journeyCard}>
+              <Heading as="h3" className={styles.journeyTitle}>
+                {step.title}
+              </Heading>
+              <p className={styles.journeyDescription}>{step.description}</p>
+              <Link className={styles.inlineLink} to={step.to}>
+                {step.label}
+              </Link>
+            </article>
           ))}
         </div>
       </div>
@@ -175,15 +497,102 @@ function HomepageFeatures() {
   );
 }
 
-
 export default function Home(): React.ReactElement {
+  const overviewCards: SummaryCard[] = [
+    {
+      title: translate({message: '多种终端会话'}),
+      description: translate({message: '支持 SSH、本地 shell、Telnet 和串口会话，可在标签页和分屏中同时工作。'}),
+    },
+    {
+      title: translate({message: '终端输出阅读'}),
+      description: translate({message: '提供搜索、命令历史建议、时间戳、关键词高亮和大输出保护。'}),
+    },
+    {
+      title: translate({message: '文件、认证与网络'}),
+      description: translate({message: '包含 SFTP、OTP、代理、跳板机、端口转发和主机密钥校验。'}),
+    },
+    {
+      title: translate({message: '配置同步与备份'}),
+      description: translate({message: '可通过 WebDAV 或 S3 兼容存储保存加密配置快照。'}),
+    },
+  ];
+
+  const featureTabs: FeatureTab[] = [
+    {
+      value: 'workspace',
+      label: translate({message: '工作区'}),
+      title: translate({message: '在一个工作区中组织多种会话'}),
+      description: translate({message: 'SSH、本地 shell、Telnet 和串口会话使用同一套标签页与分屏布局，便于同时查看不同主机、设备或任务。'}),
+      bullets: [
+        translate({message: '用标签页区分不同连接、任务或环境'}),
+        translate({message: '在单个标签页内横向或纵向拆分终端区域'}),
+        translate({message: '在侧边区域查看会话列表、文件和资源信息'}),
+      ],
+      lightImage: '/img/home/overview-light.png',
+      darkImage: '/img/home/overview-dark.png',
+    },
+    {
+      value: 'terminal',
+      label: translate({message: '终端'}),
+      title: translate({message: '改进命令输入和输出阅读'}),
+      description: translate({message: '终端区域提供搜索、命令历史建议和输出标记，减少在长日志、重复命令和排错信息之间来回查找的成本。'}),
+      bullets: [
+        translate({message: '根据历史命令提供输入建议'}),
+        translate({message: '支持终端内搜索、选中文本搜索和翻译'}),
+        translate({message: '可显示时间戳、动作链接和关键词高亮'}),
+      ],
+      lightImage: '/img/home/terminal-light.png',
+      darkImage: '/img/home/terminal-dark.png',
+    },
+    {
+      value: 'files',
+      label: translate({message: '文件传输'}),
+      title: translate({message: '在终端旁处理远程文件'}),
+      description: translate({message: 'SFTP 文件浏览器与终端工作区并列使用，适合查看日志、上传构建产物或调整远程配置文件。'}),
+      bullets: [
+        translate({message: '支持上传、下载、重命名、移动、删除和属性查看'}),
+        translate({message: '传输任务可暂停、继续、取消和失败重试'}),
+        translate({message: '本地编辑文件后可自动回传到远端路径'}),
+      ],
+      lightImage: '/img/home/files-light.png',
+      darkImage: '/img/home/files-dark.png',
+    },
+    {
+      value: 'security',
+      label: translate({message: '安全与网络'}),
+      title: translate({message: '管理连接认证和网络访问方式'}),
+      description: translate({message: '围绕 SSH 连接所需的凭据、主机校验、一次性口令、代理和端口转发提供统一配置入口。'}),
+      bullets: [
+        translate({message: '保存密码、私钥和 known hosts，并使用本地加密存储'}),
+        translate({message: '支持 TOTP / HOTP、二维码导入和 SSH 登录自动填充'}),
+        translate({message: '配置代理、跳板机、本地转发、远程转发和动态转发'}),
+      ],
+      lightImage: '/img/home/security-light.png',
+      darkImage: '/img/home/security-dark.png',
+    },
+    {
+      value: 'sync',
+      label: translate({message: '同步与备份'}),
+      title: translate({message: '同步和恢复可移植配置'}),
+      description: translate({message: 'Dragonfly 可将连接、凭据配置和常用设置打包为加密快照，用于备份、迁移或在多台设备之间同步。'}),
+      bullets: [
+        translate({message: '支持 WebDAV 和 S3 兼容存储'}),
+        translate({message: '使用主密码保护同步和备份数据'}),
+        translate({message: '支持 `.dgfy` 导入导出，并处理远端与本地版本冲突'}),
+      ],
+      lightImage: '/img/home/sync-light.png',
+      darkImage: '/img/home/sync-dark.png',
+    },
+  ];
+
   return (
     <Layout
       title={translate({message: '首页'})}
-      description={translate({message: '现代高性能 SSH 客户端，基于 Tauri 和 React 构建'})}>
+      description={translate({message: '支持 SSH、串口、本地 shell、SFTP 和配置备份的桌面终端客户端'})}>
       <HomepageHeader />
       <main>
-        <HomepageFeatures />
+        <FeaturesSection features={featureTabs} />
+        <JourneySection />
       </main>
     </Layout>
   );

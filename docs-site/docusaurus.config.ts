@@ -14,6 +14,7 @@ const config: Config = {
   projectName: 'dragonfly',
 
   onBrokenLinks: 'throw',
+  onBrokenAnchors: 'ignore',
 
   markdown: {
     hooks: {
@@ -66,10 +67,23 @@ const config: Config = {
       },
       items: [
         {
-          type: 'docSidebar',
-          sidebarId: 'docs',
+          to: '/#features',
+          position: 'left',
+          label: '功能',
+          className: 'navbar__center-link navbar__center-link--features',
+          activeBaseRegex: 'a^',
+        },
+        {
+          to: '/docs/',
           position: 'left',
           label: '文档',
+          className: 'navbar__center-link navbar__center-link--docs',
+        },
+        {
+          to: '/changelog',
+          position: 'left',
+          label: '日志',
+          className: 'navbar__center-link navbar__center-link--changelog',
         },
         {
           type: 'localeDropdown',

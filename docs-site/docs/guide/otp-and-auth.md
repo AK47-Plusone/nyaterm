@@ -100,10 +100,3 @@ OTP 不是替代密码或私钥，而是和它们配合使用：
 2. 再在具体 SSH 连接中绑定这些材料
 
 这样连接配置会更干净，也更方便后续统一替换认证信息。
-
-:::tip 截图建议
-- 推荐图片路径：`/img/docs/security/otp-management.png`
-- 建议展示 OTP 管理页中的 TOTP / HOTP 切换、二维码导入入口和验证码面板
-- 另一个推荐图片路径：`/img/docs/security/otp-dialog.png`
-- 建议展示 SSH 登录过程中弹出的 OTP 输入对话框
-:::

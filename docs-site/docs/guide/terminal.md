@@ -168,10 +168,3 @@ Dragonfly 支持会话录制，适合：
 - 资源监控
 
 这样更容易拍出“终端在真实工作流中使用”的截图，而不是单独展示某个开关。
-
-:::tip 截图建议
-- 推荐图片路径：`/img/docs/terminal/gutter-line-numbers-timestamps.png`
-- 建议先在 **设置 → 终端** 中开启行号与时间戳，再执行：`scripts/demo-terminal-gutter.sh`
-- 另一个推荐图片路径：`/img/docs/terminal/action-links-and-highlights.png`
-- 建议先开启动作链接与关键词高亮，再执行：`scripts/demo-terminal-output.sh` 与 `scripts/demo-action-links.sh`
-:::

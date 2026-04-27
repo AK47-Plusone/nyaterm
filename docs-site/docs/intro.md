@@ -85,9 +85,3 @@ Dragonfly 不只支持 SSH，还支持：
 7. [代理、跳板机与隧道](./guide/tunnels-and-proxy)
 8. [OTP 与认证](./guide/otp-and-auth)
 9. [同步与备份](./guide/sync-and-backup)
-
-:::tip 截图建议
-- 推荐图片路径：`/img/docs/readme/main-workspace.png`
-- 建议展示内容：左侧活动栏、右侧面板、中心多标签终端、底部快捷区
-- 适合先执行的脚本：`scripts/demo-terminal-output.sh`
-:::
