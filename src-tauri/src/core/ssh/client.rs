@@ -299,14 +299,15 @@ impl client::Handler for SshHandler {
 
         let check = check_known_host_entry(&content, &host_identifier, &key_type, &key_base64);
 
+        tracing::info!(
+            host = %self.host, port = self.port,
+            key_type, fingerprint = %fingerprint,
+            host_key_policy = %policy,
+            check_result = ?check,
+            "SSH host key check"
+        );
+
         if check == KnownHostCheck::Match {
-            tracing::info!(
-                host = %self.host,
-                port = self.port,
-                key_type,
-                fingerprint = %fingerprint,
-                "SSH host key verified"
-            );
             return Ok(true);
         }
 
@@ -398,7 +399,25 @@ impl client::Handler for SshHandler {
 
                 let _ = self.app.emit("host-key-verify", &payload);
 
-                let accepted = rx.await.unwrap_or(false);
+                // 120s timeout prevents indefinite hang if the frontend
+                // isn't ready (e.g. startup reconnect before listeners register).
+                let accepted = match tokio::time::timeout(
+                    std::time::Duration::from_secs(120),
+                    rx,
+                )
+                .await
+                {
+                    Ok(Ok(v)) => v,
+                    _ => {
+                        // Clean up the dangling sender so it doesn't leak.
+                        let _ = verify_mgr.respond(&request_id, false).await;
+                        tracing::warn!(
+                            host = %self.host, port = self.port,
+                            "Host key verification timed out or channel dropped, rejecting"
+                        );
+                        false
+                    }
+                };
 
                 if accepted {
                     tracing::info!(
