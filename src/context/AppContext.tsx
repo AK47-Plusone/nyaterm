@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { DEFAULT_AI_SETTINGS } from "@/lib/aiSettings";
 import { DEFAULT_CLOUD_SYNC_SETTINGS } from "@/lib/cloudSync";
 import { getErrorMessage } from "@/lib/errors";
 import {
@@ -243,44 +244,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     retention_days: 7,
   },
   ai: {
-    enabled: true,
-    context_line_limit: 200,
-    redaction_enabled: true,
-    risk_check_enabled: true,
-    allow_save_command: true,
-    record_history: true,
-    timeout_ms: 60000,
-    max_output_tokens: 1200,
-    active_profile_id: "openai",
-    provider_profiles: [
-      {
-        id: "openai",
-        name: "OpenAI",
-        provider_kind: "openai",
-        model: "gpt-4o-mini",
-        base_url: null,
-        api_key: null,
-        enabled: true,
-      },
-      {
-        id: "deepseek",
-        name: "DeepSeek",
-        provider_kind: "deepseek",
-        model: "deepseek-chat",
-        base_url: null,
-        api_key: null,
-        enabled: true,
-      },
-      {
-        id: "ollama",
-        name: "Ollama",
-        provider_kind: "ollama",
-        model: "qwen2.5-coder:7b",
-        base_url: "http://localhost:11434/v1/",
-        api_key: null,
-        enabled: true,
-      },
-    ],
+    ...DEFAULT_AI_SETTINGS,
   },
   cloud_sync: DEFAULT_CLOUD_SYNC_SETTINGS,
   ui: {

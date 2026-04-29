@@ -4,13 +4,17 @@ import { useTranslation } from "react-i18next";
 import { LuMessageSquarePlus } from "react-icons/lu";
 import {
   MdAutoAwesome,
+  MdBlock,
+  MdCheck,
   MdClose,
   MdContentCopy,
+  MdErrorOutline,
   MdExpandLess,
   MdExpandMore,
   MdHistory,
   MdInput,
   MdOutlineSettings,
+  MdPlayArrow,
   MdSave,
   MdSearch,
   MdSend,
@@ -32,11 +36,33 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useApp } from "@/context/AppContext";
 import type { AIErrorDetectedDetail, AIOpenIntent } from "@/lib/aiEvents";
 import { AI_ERROR_DETECTED_EVENT } from "@/lib/aiEvents";
+import {
+  getEnabledAIModels,
+  getModelProviderLabel,
+  isRiskAllowed,
+  selectDefaultAIModel,
+} from "@/lib/aiSettings";
 import { getErrorMessage } from "@/lib/errors";
 import { invoke } from "@/lib/invoke";
 import { buildAIContext, getTerminalContextProvider } from "@/lib/terminalContext";
@@ -47,6 +73,9 @@ import type {
   AICommandCard,
   AIContext,
   AIMessage,
+  AIMode,
+  AIModelConfigItem,
+  AIProviderCredential,
   AISession,
   AIStreamEventPayload,
   AIStreamStart,
@@ -62,6 +91,19 @@ interface AIAssistantPanelProps {
   activePane: SessionPane | null;
   activeConnection?: SavedConnection | null;
   intent: AIOpenIntent | null;
+}
+
+type AICommandExecutionStatus =
+  | "idle"
+  | "auto_executing"
+  | "executed"
+  | "pending_approval"
+  | "rejected"
+  | "failed";
+
+interface AICommandExecutionState {
+  status: AICommandExecutionStatus;
+  error?: string;
 }
 
 const riskClassName: Record<RiskLevel, string> = {
@@ -83,6 +125,10 @@ function actionTitle(action: AIAction) {
       return "分析错误";
     case "repair_from_selection":
       return "生成修复命令";
+    case "custom_terminal_action":
+      return "终端 AI 功能";
+    case "custom_file_action":
+      return "文件 AI 功能";
   }
 }
 
@@ -273,14 +319,21 @@ function AssistantResponse({ message, loading }: { message: AIMessage; loading: 
 
 function AICommandCardView({
   card,
+  execution,
   onInsert,
   onSave,
+  onAuthorize,
+  onReject,
 }: {
   card: AICommandCard;
+  execution?: AICommandExecutionState;
   onInsert: (card: AICommandCard) => void;
   onSave: (card: AICommandCard) => void;
+  onAuthorize: (card: AICommandCard) => void;
+  onReject: (card: AICommandCard) => void;
 }) {
   const { t } = useTranslation();
+  const status = execution?.status ?? "idle";
 
   const copy = async () => {
     await navigator.clipboard.writeText(card.command);
@@ -308,6 +361,50 @@ function AICommandCardView({
         <p>{card.expectedEffect}</p>
         {card.rollback ? <p>{card.rollback}</p> : null}
       </div>
+      {status !== "idle" ? (
+        <div className="mt-3 rounded-md border border-border/70 bg-muted/20 p-3">
+          <div className="flex items-center gap-2 text-xs font-medium">
+            {status === "auto_executing" ? <MdPlayArrow /> : null}
+            {status === "executed" ? <MdCheck /> : null}
+            {status === "pending_approval" ? <MdErrorOutline /> : null}
+            {status === "rejected" ? <MdBlock /> : null}
+            {status === "failed" ? <MdErrorOutline /> : null}
+            <span>
+              {status === "auto_executing"
+                ? t("ai.commandAutoExecuting")
+                : status === "executed"
+                  ? t("ai.commandExecuted")
+                  : status === "pending_approval"
+                    ? t("ai.commandPendingApproval")
+                    : status === "rejected"
+                      ? t("ai.commandRejected")
+                      : t("ai.commandExecutionFailed")}
+            </span>
+          </div>
+          {status === "pending_approval" ? (
+            <div className="mt-2 space-y-2 text-[0.6875rem] leading-5 text-muted-foreground">
+              <p>
+                {t("ai.authorizeCommandDesc", {
+                  risk: card.riskLevel,
+                })}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                <Button size="xs" variant="outline" onClick={() => onReject(card)}>
+                  <MdBlock />
+                  {t("ai.rejectExecute")}
+                </Button>
+                <Button size="xs" onClick={() => onAuthorize(card)}>
+                  <MdPlayArrow />
+                  {t("ai.authorizeExecute")}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+          {execution?.error ? (
+            <div className="mt-2 text-[0.6875rem] text-destructive">{execution.error}</div>
+          ) : null}
+        </div>
+      ) : null}
       <div className="mt-3 flex flex-wrap gap-1.5">
         <Button size="xs" onClick={() => onInsert(card)}>
           <MdInput />
@@ -326,9 +423,77 @@ function AICommandCardView({
   );
 }
 
+function ModelCombobox({
+  models,
+  credentials,
+  selectedModel,
+  open,
+  onOpenChange,
+  onSelect,
+}: {
+  models: AIModelConfigItem[];
+  credentials: AIProviderCredential[];
+  selectedModel: AIModelConfigItem | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSelect: (model: AIModelConfigItem) => void;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-8 min-w-0 max-w-[12rem] justify-between gap-2 px-2 text-xs"
+          disabled={models.length === 0}
+        >
+          <span className="truncate">{selectedModel?.name ?? t("ai.modelSelect")}</span>
+          <MdExpandMore className="shrink-0 text-sm" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 p-0" align="start">
+        <Command>
+          <CommandInput placeholder={t("ai.searchModels")} className="text-xs" />
+          <CommandList className="max-h-64 terminal-scroll">
+            <CommandEmpty>{t("ai.noModelMatches")}</CommandEmpty>
+            <CommandGroup>
+              {models.map((model) => {
+                const providerLabel = getModelProviderLabel(model, credentials);
+                return (
+                  <CommandItem
+                    key={model.id}
+                    value={`${model.name} ${providerLabel} ${model.id}`}
+                    onSelect={() => {
+                      onSelect(model);
+                      onOpenChange(false);
+                    }}
+                  >
+                    <MdCheck
+                      className={`text-sm ${selectedModel?.id === model.id ? "opacity-100" : "opacity-0"}`}
+                    />
+                    <span className="min-w-0 flex-1 truncate">{model.name}</span>
+                    {providerLabel ? (
+                      <span className="shrink-0 text-[0.625rem] text-muted-foreground">
+                        {providerLabel}
+                      </span>
+                    ) : null}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantPanelProps) {
   const { t } = useTranslation();
-  const { appSettings, tabs, savedConnections } = useApp();
+  const { appSettings, updateAppSettings, tabs, savedConnections } = useApp();
   const aiSettings = appSettings.ai;
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<AIMessage[]>([]);
@@ -346,6 +511,10 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
   const [showMentionPopover, setShowMentionPopover] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionIndex, setMentionIndex] = useState(0);
+  const [commandExecution, setCommandExecution] = useState<Record<string, AICommandExecutionState>>(
+    {},
+  );
+  const [modelPopoverOpen, setModelPopoverOpen] = useState(false);
   const handledIntentIdRef = useRef<string | null>(null);
   const historyButtonRef = useRef<HTMLButtonElement | null>(null);
   const historyCardRef = useRef<HTMLDivElement | null>(null);
@@ -356,12 +525,9 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
   const shouldAutoScrollRef = useRef(true);
   const cancelledRef = useRef(false);
 
-  const activeProfile = useMemo(
-    () =>
-      aiSettings.provider_profiles.find((profile) => profile.id === aiSettings.active_profile_id) ??
-      aiSettings.provider_profiles.find((profile) => profile.enabled),
-    [aiSettings.active_profile_id, aiSettings.provider_profiles],
-  );
+  const enabledModels = useMemo(() => getEnabledAIModels(aiSettings), [aiSettings]);
+  const selectedModel = useMemo(() => selectDefaultAIModel(aiSettings), [aiSettings]);
+  const mode = aiSettings.default_mode ?? "ask";
 
   const allSessionPanes = useMemo(() => {
     const panes: SessionPane[] = [];
@@ -386,6 +552,7 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
     );
   }, [allSessionPanes, mentionQuery]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset selection whenever the filtered mention list changes.
   useEffect(() => {
     setMentionIndex(0);
   }, [filteredMentionPanes]);
@@ -394,6 +561,12 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
   const effectiveSessionId = effectivePanes[0]?.sessionId ?? null;
 
   const activeSessionId = activePane?.sessionId ?? null;
+
+  useEffect(() => {
+    if (!selectedModel || selectedModel.id === aiSettings.default_model_id) return;
+    updateAppSettings({ ai: { ...aiSettings, default_model_id: selectedModel.id } });
+  }, [aiSettings, selectedModel, updateAppSettings]);
+
   const filteredSessions = useMemo(() => {
     const keyword = historyQuery.trim().toLowerCase();
     if (!keyword) return sessions;
@@ -434,6 +607,7 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
     shouldAutoScrollRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll when chat messages change.
   useEffect(() => {
     if (!shouldAutoScrollRef.current) return;
     requestAnimationFrame(() => {
@@ -472,6 +646,7 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
       generatedCommand?: string;
       riskLevel?: RiskLevel;
       insertedToTerminal?: boolean;
+      executed?: boolean;
       blocked?: boolean;
     }) => {
       void invoke("append_ai_audit", {
@@ -482,7 +657,7 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
           generatedCommand: params.generatedCommand,
           riskLevel: params.riskLevel,
           insertedToTerminal: params.insertedToTerminal ?? false,
-          executed: false,
+          executed: params.executed ?? false,
           blocked: params.blocked ?? false,
         },
       }).catch(() => {});
@@ -551,6 +726,69 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
     [activeConnection, aiSettings.context_line_limit, savedConnections],
   );
 
+  const setCommandState = useCallback(
+    (cardId: string, status: AICommandExecutionStatus, error?: string) => {
+      setCommandExecution((prev) => ({ ...prev, [cardId]: { status, error } }));
+    },
+    [],
+  );
+
+  const executeCommandCard = useCallback(
+    async (card: AICommandCard, source: "auto" | "authorized") => {
+      const targetSessionId = effectiveSessionId ?? activeSessionId;
+      const provider = getTerminalContextProvider(targetSessionId);
+      if (!provider) {
+        const error = t("ai.noTerminal");
+        setCommandState(card.id, "failed", error);
+        toast.error(error);
+        return;
+      }
+      if (!provider.executeCommand) {
+        const error = t("ai.executeUnsupported");
+        setCommandState(card.id, "failed", error);
+        toast.error(error);
+        return;
+      }
+
+      setCommandState(card.id, "auto_executing");
+      try {
+        await provider.executeCommand(card.command);
+        provider.focus();
+        setCommandState(card.id, "executed");
+        appendAudit({
+          action: source === "auto" ? "ai.agent_auto_execute" : "ai.agent_authorized_execute",
+          generatedCommand: card.command,
+          riskLevel: card.riskLevel,
+          executed: true,
+        });
+      } catch (error) {
+        const message = getErrorMessage(error);
+        setCommandState(card.id, "failed", message);
+        appendAudit({
+          action: "ai.agent_execute_failed",
+          generatedCommand: card.command,
+          riskLevel: card.riskLevel,
+        });
+        toast.error(message);
+      }
+    },
+    [activeSessionId, appendAudit, effectiveSessionId, setCommandState, t],
+  );
+
+  const handleAgentCommandCards = useCallback(
+    (cards: AICommandCard[], requestMode: AIMode, allowedRisk: RiskLevel) => {
+      if (requestMode !== "agent") return;
+      for (const card of cards) {
+        if (isRiskAllowed(card.riskLevel, allowedRisk)) {
+          void executeCommandCard(card, "auto");
+        } else {
+          setCommandState(card.id, "pending_approval");
+        }
+      }
+    },
+    [executeCommandCard, setCommandState],
+  );
+
   const startChat = useCallback(
     async (action: AIAction, userInput: string, selectedText?: string) => {
       const panes = effectivePanes;
@@ -562,6 +800,13 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
         toast.error(t("ai.disabled"));
         return;
       }
+      const requestModel = selectedModel;
+      if (!requestModel) {
+        toast.error(t("ai.noEnabledModels"));
+        return;
+      }
+      const requestMode = mode;
+      const allowedRisk = aiSettings.allowed_command_risk_level ?? "medium";
 
       setDetectedError(null);
       setLoading(true);
@@ -633,6 +878,11 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
                   message.id === assistantId && payload.message ? payload.message : message,
                 ),
               );
+              handleAgentCommandCards(
+                payload.message?.commandCards ?? payload.commandCards ?? [],
+                requestMode,
+                allowedRisk,
+              );
               void loadSessions();
               return;
             }
@@ -674,11 +924,15 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
             connectionId: primaryConn?.id ?? null,
             action,
             userInput,
+            mode: requestMode,
+            modelId: requestModel.id,
+            modelName: requestModel.name,
             context,
             options: {
               maxOutputCommands: 5,
               language: "zh-CN",
               safetyMode: "strict",
+              allowedCommandRiskLevel: allowedRisk,
             },
           },
         });
@@ -704,14 +958,18 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
     },
     [
       activeConnection,
+      aiSettings.allowed_command_risk_level,
       aiSettings.enabled,
       appendAudit,
       buildMergedContext,
       cleanupStreamListener,
       currentSessionId,
       effectivePanes,
+      handleAgentCommandCards,
       loadSessions,
+      mode,
       savedConnections,
+      selectedModel,
       t,
     ],
   );
@@ -808,6 +1066,26 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
     [aiSettings.allow_save_command, appendAudit, t],
   );
 
+  const authorizeCommand = useCallback(
+    (card: AICommandCard) => {
+      void executeCommandCard(card, "authorized");
+    },
+    [executeCommandCard],
+  );
+
+  const rejectCommand = useCallback(
+    (card: AICommandCard) => {
+      setCommandState(card.id, "rejected");
+      appendAudit({
+        action: "ai.agent_reject_execute",
+        generatedCommand: card.command,
+        riskLevel: card.riskLevel,
+        blocked: true,
+      });
+    },
+    [appendAudit, setCommandState],
+  );
+
   const clearHistory = useCallback(async () => {
     if (loading) return;
     setClearingHistory(true);
@@ -832,6 +1110,7 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
     setInput("");
     setDetectedError(null);
     setTargetPanes([]);
+    setCommandExecution({});
     setShowMentionPopover(false);
     shouldAutoScrollRef.current = true;
   }, [loading]);
@@ -900,7 +1179,7 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
     >
       <PanelHeader
         title={t("ai.title")}
-        meta={activeProfile?.name ?? t("ai.notConfigured")}
+        meta={selectedModel?.name ?? t("ai.notConfigured")}
         actions={
           <>
             <Button
@@ -1019,7 +1298,7 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
         {messages.length === 0 ? (
           <div className="flex h-full min-h-[12rem] flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground">
             <MdAutoAwesome className="text-3xl" />
-            <div>{t("ai.empty")}</div>
+            <div>{aiSettings.enabled ? t("ai.empty") : t("ai.goToSettingsToEnable")}</div>
           </div>
         ) : (
           <div className="space-y-3">
@@ -1055,8 +1334,11 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
                       <AICommandCardView
                         key={card.id}
                         card={card}
+                        execution={commandExecution[card.id]}
                         onInsert={insertCommand}
                         onSave={(item) => void saveQuickCommand(item)}
+                        onAuthorize={authorizeCommand}
+                        onReject={rejectCommand}
                       />
                     ))}
                   </div>
@@ -1131,12 +1413,12 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
               </div>
             </div>
           ) : null}
-          <div className="flex gap-2">
+          <div className="space-y-2">
             <Textarea
               ref={textareaRef}
               value={input}
-              disabled={loading}
-              placeholder={t("ai.placeholder")}
+              disabled={loading || !aiSettings.enabled}
+              placeholder={aiSettings.enabled ? t("ai.placeholder") : t("ai.goToSettingsToEnable")}
               className="max-h-32 min-h-16 resize-none overflow-y-auto text-xs terminal-scroll"
               onChange={handleInputChange}
               onKeyDown={(event) => {
@@ -1176,15 +1458,52 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
                 }
               }}
             />
-            {loading ? (
-              <Button size="icon-sm" variant="outline" onClick={cancelStream}>
-                <MdStop />
-              </Button>
-            ) : (
-              <Button size="icon-sm" onClick={submit} disabled={!input.trim()}>
-                <MdSend />
-              </Button>
-            )}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <Select
+                  value={mode}
+                  onValueChange={(default_mode) =>
+                    updateAppSettings({
+                      ai: { ...aiSettings, default_mode: default_mode as AIMode },
+                    })
+                  }
+                >
+                  <SelectTrigger size="sm" className="w-[6.5rem] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ask">{t("ai.modeAsk")}</SelectItem>
+                    <SelectItem value="agent">{t("ai.modeAgent")}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <ModelCombobox
+                  models={enabledModels}
+                  credentials={aiSettings.provider_credentials}
+                  selectedModel={selectedModel}
+                  open={modelPopoverOpen}
+                  onOpenChange={setModelPopoverOpen}
+                  onSelect={(model) =>
+                    updateAppSettings({ ai: { ...aiSettings, default_model_id: model.id } })
+                  }
+                />
+              </div>
+              {loading ? (
+                <Button size="icon-sm" variant="outline" onClick={cancelStream}>
+                  <MdStop />
+                </Button>
+              ) : (
+                <Button
+                  size="icon-sm"
+                  onClick={submit}
+                  disabled={!input.trim() || !selectedModel || !aiSettings.enabled}
+                >
+                  <MdSend />
+                </Button>
+              )}
+            </div>
+            {!selectedModel ? (
+              <div className="text-[0.6875rem] text-amber-600">{t("ai.noEnabledModels")}</div>
+            ) : null}
           </div>
         </div>
       </div>

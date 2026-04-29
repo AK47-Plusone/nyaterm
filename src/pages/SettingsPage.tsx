@@ -24,9 +24,11 @@ import {
   MdTerminal,
   MdTranslate,
 } from "react-icons/md";
+import { TbCubeSpark } from "react-icons/tb";
+import { FiBook } from "react-icons/fi";
 import { toast } from "sonner";
 import ChildWindowHeader from "@/components/layout/ChildWindowHeader";
-import { AiTab } from "@/components/settings/AiTab";
+import { AiGeneralTab, AiModelsTab, AiRulesTab } from "@/components/settings/AiTab";
 import { AppearanceTab } from "@/components/settings/AppearanceTab";
 import { GeneralTab } from "@/components/settings/GeneralTab";
 import { InteractionTab } from "@/components/settings/InteractionTab";
@@ -74,7 +76,8 @@ export default function SettingsPage() {
   const committedSettings = app.appSettings;
 
   const params = new URLSearchParams(window.location.search);
-  const initialTab = params.get("tab") || "general";
+  const requestedInitialTab = params.get("tab") || "general";
+  const initialTab = requestedInitialTab === "ai" ? "ai-general" : requestedInitialTab;
   const [activeTab, setActiveTab] = useState(initialTab);
   const [draftSettings, setDraftSettings] = useState<AppSettings>(committedSettings);
   const [isSaving, setIsSaving] = useState(false);
@@ -107,7 +110,13 @@ export default function SettingsPage() {
         id: "terminal_session",
         label: t("settings.groupTerminalSession"),
         icon: "dns",
-        items: ["terminal", "search", "translation", "ai"],
+        items: ["terminal", "search", "translation"],
+      },
+      {
+        id: "ai_group",
+        label: t("ai.title"),
+        icon: "ai",
+        items: ["ai-general", "ai-models", "ai-rules"],
       },
       {
         id: "transfer_group",
@@ -207,10 +216,22 @@ export default function SettingsPage() {
       Component: InteractionTab,
     },
     {
-      id: "ai",
-      label: t("ai.title"),
-      icon: "ai",
-      Component: AiTab,
+      id: "ai-general",
+      label: t("ai.general"),
+      icon: "settings",
+      Component: AiGeneralTab,
+    },
+    {
+      id: "ai-models",
+      label: t("ai.models"),
+      icon: "model",
+      Component: AiModelsTab,
+    },
+    {
+      id: "ai-rules",
+      label: t("ai.rules"),
+      icon: "rules",
+      Component: AiRulesTab,
     },
   ];
 
@@ -230,6 +251,8 @@ export default function SettingsPage() {
     terminal: MdTerminal,
     mouse: MdMouse,
     ai: MdAutoAwesome,
+    model: TbCubeSpark,
+    rules: FiBook,
   };
 
   function DynamicIcon({ name, className }: { name: string; className?: string }) {

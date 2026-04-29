@@ -8,6 +8,7 @@ export interface AIOpenIntent {
   action: AIAction;
   userInput?: string;
   selectedText?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface AIErrorDetectedDetail {

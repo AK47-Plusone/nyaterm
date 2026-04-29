@@ -475,6 +475,8 @@ export interface DiagnosticsSettings {
 }
 
 export type RiskLevel = "low" | "medium" | "high" | "critical";
+export type AIMode = "ask" | "agent";
+export type AIModelSource = "rust-genai" | "manual";
 
 export type AIProviderKind =
   | "openai"
@@ -483,7 +485,21 @@ export type AIProviderKind =
   | "deepseek"
   | "groq"
   | "ollama"
+  | "xai"
+  | "cohere"
+  | "mimo"
+  | "zai"
   | "openai_compatible";
+
+export interface AIModelConfigItem {
+  id: string;
+  name: string;
+  provider_kind?: AIProviderKind | null;
+  credential_id?: string | null;
+  enabled: boolean;
+  source: AIModelSource;
+  last_seen_at?: string | null;
+}
 
 export interface AIProviderProfile {
   id: string;
@@ -495,7 +511,24 @@ export interface AIProviderProfile {
   enabled: boolean;
 }
 
+export interface AIProviderCredential {
+  id: string;
+  name: string;
+  provider_kind: AIProviderKind;
+  base_url?: string | null;
+  api_key?: string | null;
+  enabled: boolean;
+}
+
+export interface AICustomActionConfig {
+  id: string;
+  name: string;
+  prompt: string;
+  enabled: boolean;
+}
+
 export interface AISettings {
+  schema_version: number;
   enabled: boolean;
   context_line_limit: number;
   redaction_enabled: boolean;
@@ -503,9 +536,16 @@ export interface AISettings {
   allow_save_command: boolean;
   record_history: boolean;
   timeout_ms: number;
-  max_output_tokens: number;
   active_profile_id: string;
   provider_profiles: AIProviderProfile[];
+  allowed_command_risk_level: RiskLevel;
+  default_mode: AIMode;
+  default_model_id?: string | null;
+  models: AIModelConfigItem[];
+  provider_credentials: AIProviderCredential[];
+  terminal_ai_actions: AICustomActionConfig[];
+  file_ai_actions: AICustomActionConfig[];
+  max_ai_file_size_bytes: number;
 }
 
 export interface AIContext {
@@ -526,7 +566,17 @@ export type AIAction =
   | "explain_output"
   | "explain_selected"
   | "analyze_error"
-  | "repair_from_selection";
+  | "repair_from_selection"
+  | "custom_terminal_action"
+  | "custom_file_action";
+
+export interface AIModelDiscovery {
+  id: string;
+  name: string;
+  providerKind?: AIProviderKind | null;
+  credentialId?: string | null;
+  source: AIModelSource;
+}
 
 export interface AICommandCard {
   id: string;
