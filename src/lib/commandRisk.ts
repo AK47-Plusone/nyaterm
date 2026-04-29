@@ -70,6 +70,20 @@ const patterns: RiskPattern[] = [
     confirmText: "我确认要删除目标路径",
   },
   {
+    pattern: /\bchmod\s+-R\s+777\s+\//i,
+    riskLevel: "critical",
+    blocked: true,
+    reason: "递归修改根目录权限会破坏系统安全和可用性。",
+    safeAlternatives: ["stat /", "namei -l <path>"],
+  },
+  {
+    pattern: /\bchown\s+-R\s+\S+\s+\//i,
+    riskLevel: "critical",
+    blocked: true,
+    reason: "递归修改根目录属主会破坏系统文件权限。",
+    safeAlternatives: ["stat /", "namei -l <path>"],
+  },
+  {
     pattern: /\bdocker\s+system\s+prune\b.*\s-a\b/i,
     riskLevel: "high",
     blocked: false,
