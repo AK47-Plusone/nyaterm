@@ -8,6 +8,7 @@ import {
   MdCheck,
   MdClose,
   MdContentCopy,
+  MdDeleteOutline,
   MdErrorOutline,
   MdExpandLess,
   MdExpandMore,
@@ -198,6 +199,36 @@ interface QuotedText {
 
 function AnimatedStatusText({ label }: { label: string }) {
   return <span className="df-thinking-text font-medium">{label}</span>;
+}
+
+type DateGroup = "today" | "yesterday" | "last7Days" | "earlier";
+
+function getDateGroup(dateStr: string): DateGroup {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterdayStart = new Date(todayStart.getTime() - 86400000);
+  const last7Start = new Date(todayStart.getTime() - 6 * 86400000);
+
+  if (date >= todayStart) return "today";
+  if (date >= yesterdayStart) return "yesterday";
+  if (date >= last7Start) return "last7Days";
+  return "earlier";
+}
+
+const dateGroupOrder: DateGroup[] = ["today", "yesterday", "last7Days", "earlier"];
+
+function groupSessionsByDate(sessions: AISession[]) {
+  const groups: Record<DateGroup, AISession[]> = {
+    today: [],
+    yesterday: [],
+    last7Days: [],
+    earlier: [],
+  };
+  for (const session of sessions) {
+    groups[getDateGroup(session.updatedAt)].push(session);
+  }
+  return groups;
 }
 
 function buildPrismThemeFromColors(colors: import("@/lib/themes").ThemeColors): Record<string, CSSProperties> {
@@ -725,7 +756,7 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
   const [commandExecution, setCommandExecution] = useState<Record<string, AICommandExecutionState>>(
     {},
   );
-  const [agentSteps, setAgentSteps] = useState<AgentStepPayload[]>([]);
+  const [agentStepsMap, setAgentStepsMap] = useState<Record<string, AgentStepPayload[]>>({});
   const [modelPopoverOpen, setModelPopoverOpen] = useState(false);
   const handledIntentIdRef = useRef<string | null>(null);
   const historyButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -827,7 +858,7 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
       const el = scrollContainerRef.current;
       if (el) el.scrollTop = el.scrollHeight;
     });
-  }, [messages, agentSteps]);
+  }, [messages, agentStepsMap]);
 
   const loadSessions = useCallback(async () => {
     try {
@@ -1025,7 +1056,6 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
       setLoading(true);
       cancelledRef.current = false;
       cleanupStreamListener();
-      if (requestMode === "agent") setAgentSteps([]);
 
       const userMessage = createLocalMessage("user", userInput, currentSessionId ?? "local");
       const assistantId = `assistant-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -1054,14 +1084,15 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
 
             if ("stepIndex" in raw) {
               const step = raw as unknown as AgentStepPayload;
-              setAgentSteps((prev) => {
-                const existing = prev.findIndex((s) => s.stepIndex === step.stepIndex);
+              setAgentStepsMap((prev) => {
+                const steps = prev[assistantId] ?? [];
+                const existing = steps.findIndex((s) => s.stepIndex === step.stepIndex);
                 if (existing >= 0) {
-                  const next = [...prev];
+                  const next = [...steps];
                   next[existing] = step;
-                  return next;
+                  return { ...prev, [assistantId]: next };
                 }
-                return [...prev, step];
+                return { ...prev, [assistantId]: [...steps, step] };
               });
               return;
             }
@@ -1103,11 +1134,22 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
               setLoading(false);
               setStreamId(null);
               setStreamingAssistantId(null);
-              setMessages((prev) =>
-                prev.map((message) =>
-                  message.id === assistantId && payload.message ? payload.message : message,
-                ),
-              );
+              const newMsgId = payload.message?.id;
+              if (payload.message) {
+                setMessages((prev) =>
+                  prev.map((message) =>
+                    message.id === assistantId ? payload.message! : message,
+                  ),
+                );
+              }
+              if (newMsgId && newMsgId !== assistantId) {
+                setAgentStepsMap((prev) => {
+                  const steps = prev[assistantId];
+                  if (!steps) return prev;
+                  const { [assistantId]: _, ...rest } = prev;
+                  return { ...rest, [newMsgId]: steps };
+                });
+              }
               if (requestMode !== "agent") {
                 handleAgentCommandCards(
                   payload.message?.commandCards ?? payload.commandCards ?? [],
@@ -1338,6 +1380,37 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
     }
   }, [loadSessions, loading]);
 
+  const deleteSession = useCallback(
+    async (sessionId: string) => {
+      try {
+        await invoke("delete_ai_session", { sessionId });
+        if (currentSessionId === sessionId) {
+          setMessages([]);
+          setCurrentSessionId(null);
+        }
+        await loadSessions();
+      } catch (error) {
+        toast.error(getErrorMessage(error));
+      }
+    },
+    [currentSessionId, loadSessions],
+  );
+
+  const dateGroupLabel: Record<DateGroup, string> = useMemo(
+    () => ({
+      today: t("ai.dateToday"),
+      yesterday: t("ai.dateYesterday"),
+      last7Days: t("ai.dateLast7Days"),
+      earlier: t("ai.dateEarlier"),
+    }),
+    [t],
+  );
+
+  const groupedSessions = useMemo(
+    () => groupSessionsByDate(filteredSessions),
+    [filteredSessions],
+  );
+
   const newChat = useCallback(() => {
     if (loading) return;
     setMessages([]);
@@ -1347,7 +1420,7 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
     setDetectedError(null);
     setTargetPanes([]);
     setCommandExecution({});
-    setAgentSteps([]);
+    setAgentStepsMap({});
     setShowMentionPopover(false);
     shouldAutoScrollRef.current = true;
   }, [loading]);
@@ -1500,7 +1573,7 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
               disabled={sessions.length === 0 || loading || clearingHistory}
               onClick={() => setClearHistoryOpen(true)}
             >
-              {t("common.delete")}
+              {t("ai.clearHistory")}
             </Button>
           </div>
           <div className="min-h-0 overflow-auto p-2 terminal-scroll">
@@ -1509,18 +1582,42 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
                 {sessions.length === 0 ? t("ai.noHistory") : t("ai.noHistoryMatches")}
               </div>
             ) : (
-              filteredSessions.map((session) => (
-                <button
-                  key={session.id}
-                  className="mb-1 block w-full rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted/60"
-                  onClick={() => void loadSessionMessages(session.id)}
-                >
-                  <div className="truncate font-medium">{session.title}</div>
-                  <div className="truncate text-[0.6875rem] text-muted-foreground">
-                    {session.updatedAt}
+              dateGroupOrder.map((group) => {
+                const items = groupedSessions[group];
+                if (items.length === 0) return null;
+                return (
+                  <div key={group} className="mb-1">
+                    <div className="px-2 py-1 text-[0.625rem] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                      {dateGroupLabel[group]}
+                    </div>
+                    {items.map((session) => (
+                      <div
+                        key={session.id}
+                        className="group flex items-center gap-1 rounded-md px-2 py-1.5 hover:bg-muted/60"
+                      >
+                        <button
+                          type="button"
+                          className="min-w-0 flex-1 text-left text-xs"
+                          onClick={() => void loadSessionMessages(session.id)}
+                        >
+                          <div className="truncate font-medium">{session.title}</div>
+                        </button>
+                        <button
+                          type="button"
+                          className="shrink-0 rounded p-0.5 text-muted-foreground/50 opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                          title={t("ai.deleteSession")}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void deleteSession(session.id);
+                          }}
+                        >
+                          <MdDeleteOutline className="text-sm" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                </button>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -1557,59 +1654,64 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
               </div>
             ) : (
               <div className="space-y-3">
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`rounded-md border p-3 text-xs leading-5 ${
-                      message.role === "user"
-                        ? "border-primary/25 bg-primary/10"
-                        : "border-border/70 bg-muted/20"
-                    }`}
-                  >
-                    <div className="mb-2 text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      {message.role === "user" ? "User" : "AI"}
-                    </div>
-                    {message.role === "assistant" ? (
-                      <AssistantReasoning
-                        message={message}
-                        loading={loading && streamingAssistantId === message.id}
-                      />
-                    ) : null}
-                    {message.role === "assistant" ? (
-                      <AssistantResponse
-                        message={message}
-                        loading={loading && streamingAssistantId === message.id}
-                      />
-                    ) : (
-                      <div className="whitespace-pre-wrap break-words">{message.content}</div>
-                    )}
-                    {message.commandCards?.length ? (
-                      <div className="mt-3 space-y-2">
-                        {message.commandCards.map((card) => (
-                          <AICommandCardView
-                            key={card.id}
-                            card={card}
-                            execution={commandExecution[card.id]}
-                            onInsert={insertCommand}
-                            onSave={(item) => void saveQuickCommand(item)}
-                            onAuthorize={authorizeCommand}
-                            onReject={rejectCommand}
+                {messages.map((message) => {
+                  const messageSteps = message.role === "assistant" ? (agentStepsMap[message.id] ?? []) : [];
+
+                  return (
+                    <div key={message.id} className="space-y-3">
+                      {messageSteps.length > 0 ? (
+                        <div className="rounded-md border border-border/70 bg-muted/20 p-3 text-xs leading-5">
+                          <div className="mb-3 text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                            Agent
+                          </div>
+                          {messageSteps.map((step) => (
+                            <AgentStepView key={step.stepIndex} step={step} prismStyle={prismStyle} />
+                          ))}
+                        </div>
+                      ) : null}
+                      <div
+                        className={`rounded-md border p-3 text-xs leading-5 ${
+                          message.role === "user"
+                            ? "border-primary/25 bg-primary/10"
+                            : "border-border/70 bg-muted/20"
+                        }`}
+                      >
+                        <div className="mb-2 text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                          {message.role === "user" ? "User" : "AI"}
+                        </div>
+                        {message.role === "assistant" ? (
+                          <AssistantReasoning
+                            message={message}
+                            loading={loading && streamingAssistantId === message.id}
                           />
-                        ))}
+                        ) : null}
+                        {message.role === "assistant" ? (
+                          <AssistantResponse
+                            message={message}
+                            loading={loading && streamingAssistantId === message.id}
+                          />
+                        ) : (
+                          <div className="whitespace-pre-wrap break-words">{message.content}</div>
+                        )}
+                        {message.commandCards?.length ? (
+                          <div className="mt-3 space-y-2">
+                            {message.commandCards.map((card) => (
+                              <AICommandCardView
+                                key={card.id}
+                                card={card}
+                                execution={commandExecution[card.id]}
+                                onInsert={insertCommand}
+                                onSave={(item) => void saveQuickCommand(item)}
+                                onAuthorize={authorizeCommand}
+                                onReject={rejectCommand}
+                              />
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
-                    ) : null}
-                  </div>
-                ))}
-                {agentSteps.length > 0 ? (
-                  <div className="rounded-md border border-border/70 bg-muted/20 p-3 text-xs leading-5">
-                    <div className="mb-3 text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      Agent
                     </div>
-                    {agentSteps.map((step) => (
-                      <AgentStepView key={step.stepIndex} step={step} prismStyle={prismStyle} />
-                    ))}
-                  </div>
-                ) : null}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1817,7 +1919,7 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
                 void clearHistory();
               }}
             >
-              {t("common.delete")}
+              {t("ai.clearHistory")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
