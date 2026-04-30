@@ -471,18 +471,21 @@ export default function Header({
       style={{ backgroundColor: "var(--df-bg-panel)", borderColor: "var(--df-border)" }}
     >
       <div className={`flex items-center gap-2 shrink-0${isMacOS ? " pl-[70px]" : ""}`}>
-        <DragonflyLogo className="h-5 w-5 shrink-0" onDoubleClick={handleToggleMaximizeWindow} />
+        {!isMacOS && (
+          <DragonflyLogo className="h-5 w-5 shrink-0" onDoubleClick={handleToggleMaximizeWindow} />
+        )}
 
-        {/* Mobile Left Toggle */}
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="lg:hidden text-[var(--df-text-muted)] hover:bg-[color-mix(in_srgb,var(--df-text-muted)_10%,transparent)] hover:text-[var(--df-text-muted)]"
-          onClick={onToggleLeft}
-        >
-          <MdMenu className="text-base" />
-        </Button>
+        {!isMacOS && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="lg:hidden text-[var(--df-text-muted)] hover:bg-[color-mix(in_srgb,var(--df-text-muted)_10%,transparent)] hover:text-[var(--df-text-muted)]"
+            onClick={onToggleLeft}
+          >
+            <MdMenu className="text-base" />
+          </Button>
+        )}
 
         <Menubar className="border-none bg-transparent h-auto p-0 gap-1 shadow-none">
           {menuKeys.map(({ key, label }) => (
@@ -546,16 +549,17 @@ export default function Header({
       </div>
 
       <div className="flex items-center gap-1 shrink-0" style={{ color: "var(--df-text-muted)" }}>
-        {/* Mobile Right Toggle */}
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="md:hidden text-[var(--df-text-muted)] hover:bg-[color-mix(in_srgb,var(--df-text-muted)_10%,transparent)] hover:text-[var(--df-text-muted)]"
-          onClick={onToggleRight}
-        >
-          <MdViewSidebar className="text-base" />
-        </Button>
+        {!isMacOS && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="md:hidden text-[var(--df-text-muted)] hover:bg-[color-mix(in_srgb,var(--df-text-muted)_10%,transparent)] hover:text-[var(--df-text-muted)]"
+            onClick={onToggleRight}
+          >
+            <MdViewSidebar className="text-base" />
+          </Button>
+        )}
 
         {!isMacOS && (
           <div className="flex items-center h-full -mr-2 ml-1">
