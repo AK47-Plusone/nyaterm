@@ -48,6 +48,7 @@ import { useConfigTransfer } from "@/hooks/useConfigTransfer";
 import { MOD } from "@/hooks/useGlobalShortcuts";
 import { AVAILABLE_LANGUAGES } from "@/i18n";
 import { logger } from "@/lib/logger";
+import { isMacOS } from "@/lib/platform";
 import {
   DEFAULT_TERMINAL_FONT_SIZE,
   decreaseTerminalFontSize,
@@ -469,7 +470,7 @@ export default function Header({
       className="h-10 border-b flex items-center gap-2 px-2 select-none shrink-0"
       style={{ backgroundColor: "var(--df-bg-panel)", borderColor: "var(--df-border)" }}
     >
-      <div className="flex items-center gap-2 shrink-0">
+      <div className={`flex items-center gap-2 shrink-0${isMacOS ? " pl-[70px]" : ""}`}>
         <DragonflyLogo className="h-5 w-5 shrink-0" onDoubleClick={handleToggleMaximizeWindow} />
 
         {/* Mobile Left Toggle */}
@@ -556,41 +557,43 @@ export default function Header({
           <MdViewSidebar className="text-base" />
         </Button>
 
-        <div className="flex items-center h-full -mr-2 ml-1">
-          <Button
-            type="button"
-            variant="ghost"
-            className="rounded-none h-10 w-[46px] px-0 text-[var(--df-text-muted)] transition-colors hover:!bg-[color-mix(in_srgb,var(--df-text)_10%,transparent)] hover:!text-[var(--df-text)]"
-            aria-label={t("menu.minimize")}
-            onClick={handleMinimizeWindow}
-          >
-            <VscChromeMinimize className="text-base" />
-          </Button>
+        {!isMacOS && (
+          <div className="flex items-center h-full -mr-2 ml-1">
+            <Button
+              type="button"
+              variant="ghost"
+              className="rounded-none h-10 w-[46px] px-0 text-[var(--df-text-muted)] transition-colors hover:!bg-[color-mix(in_srgb,var(--df-text)_10%,transparent)] hover:!text-[var(--df-text)]"
+              aria-label={t("menu.minimize")}
+              onClick={handleMinimizeWindow}
+            >
+              <VscChromeMinimize className="text-base" />
+            </Button>
 
-          <Button
-            type="button"
-            variant="ghost"
-            className="rounded-none h-10 w-[46px] px-0 text-[var(--df-text-muted)] transition-colors hover:!bg-[color-mix(in_srgb,var(--df-text)_10%,transparent)] hover:!text-[var(--df-text)]"
-            aria-label={isMaximized ? t("menu.restore") : t("menu.maximize")}
-            onClick={handleToggleMaximizeWindow}
-          >
-            {isMaximized ? (
-              <VscChromeRestore className="text-base" />
-            ) : (
-              <VscChromeMaximize className="text-base" />
-            )}
-          </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="rounded-none h-10 w-[46px] px-0 text-[var(--df-text-muted)] transition-colors hover:!bg-[color-mix(in_srgb,var(--df-text)_10%,transparent)] hover:!text-[var(--df-text)]"
+              aria-label={isMaximized ? t("menu.restore") : t("menu.maximize")}
+              onClick={handleToggleMaximizeWindow}
+            >
+              {isMaximized ? (
+                <VscChromeRestore className="text-base" />
+              ) : (
+                <VscChromeMaximize className="text-base" />
+              )}
+            </Button>
 
-          <Button
-            type="button"
-            variant="ghost"
-            className="rounded-none h-10 w-[46px] px-0 text-[var(--df-text-muted)] transition-colors hover:!bg-[#e81123] hover:!text-white"
-            aria-label={t("common.close")}
-            onClick={handleCloseWindow}
-          >
-            <VscChromeClose className="text-base" />
-          </Button>
-        </div>
+            <Button
+              type="button"
+              variant="ghost"
+              className="rounded-none h-10 w-[46px] px-0 text-[var(--df-text-muted)] transition-colors hover:!bg-[#e81123] hover:!text-white"
+              aria-label={t("common.close")}
+              onClick={handleCloseWindow}
+            >
+              <VscChromeClose className="text-base" />
+            </Button>
+          </div>
+        )}
       </div>
       <ImportDialog open={showImportDialog} onClose={() => setShowImportDialog(false)} />
       {passwordAlert}

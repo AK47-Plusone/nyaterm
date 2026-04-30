@@ -2,6 +2,7 @@ import { emit } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import i18n from "../i18n";
+import { isMacOS } from "./platform";
 
 interface ChildWindowOptions {
   label: string;
@@ -92,7 +93,9 @@ export async function openChildWindow(opts: ChildWindowOptions) {
     height: opts.height ?? 560,
     visible: false,
     center: true,
-    decorations: false,
+    decorations: isMacOS,
+    titleBarStyle: isMacOS ? "overlay" : undefined,
+    hiddenTitle: isMacOS || undefined,
     resizable: opts.resizable ?? true,
     alwaysOnTop: isModalChild,
     parent: parentWindow,
