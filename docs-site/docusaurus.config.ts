@@ -4,7 +4,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
   title: 'NyaTerm',
-  tagline: '现代高性能 SSH 客户端',
+  tagline: 'A desktop client for SSH-centric operations and mixed terminal workflows.',
   favicon: 'img/logo.svg',
 
   url: 'https://nyaterm.app',

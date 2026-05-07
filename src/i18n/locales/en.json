@@ -1,7 +1,7 @@
 {
   "about": {
     "close": "Close",
-    "description": "A modern, high-performance SSH client built with Tauri and React.",
+    "description": "A desktop client for SSH-centric operations and mixed terminal workflows.",
     "issues": "Issues",
     "website": "Website"
   },
