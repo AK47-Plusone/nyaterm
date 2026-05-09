@@ -334,7 +334,9 @@ export class ActionLinksAddon implements ITerminalAddon, ILinkProvider {
   private _decoCache = new Map<string, { deco: IDecoration; marker: IMarker }>();
   private _lineToDecoKeys = new Map<number, string[]>();
   private _scannedAbsLines = new Set<number>();
-  private _decoTimer: ReturnType<typeof setTimeout> | null = null;
+  private _writeDecoTimer: ReturnType<typeof setTimeout> | null = null;
+  private _scrollThrottleTimer: ReturnType<typeof setTimeout> | null = null;
+  private _scrollThrottlePending = false;
   private _lastViewportY = -1;
   private _sentinelMarker: IMarker | null = null;
   private _sentinelDisposable: IDisposable | null = null;
@@ -342,6 +344,7 @@ export class ActionLinksAddon implements ITerminalAddon, ILinkProvider {
 
   private static readonly OVERSCAN_LINES = 200;
   private static readonly DECORATION_DEBOUNCE_MS = 50;
+  private static readonly DECORATION_THROTTLE_MS = 80;
   private static readonly MAX_CACHE_ENTRIES = 2000;
 
   constructor(matchers: ActionMatcher[] = [], options: ActionLinksAddonOptions = {}) {
@@ -360,17 +363,17 @@ export class ActionLinksAddon implements ITerminalAddon, ILinkProvider {
     this._disposables.push(
       terminal.onWriteParsed(() => {
         this._cache.clear();
-        this._scheduleDecoRefresh();
+        this._scheduleWriteDecoRefresh();
       }),
       terminal.onResize(() => {
         this._clearAllDecorations();
-        this._scheduleDecoRefresh();
+        this._scheduleWriteDecoRefresh();
       }),
       terminal.onRender(() => {
         const currentViewportY = terminal.buffer.active?.viewportY ?? 0;
         if (currentViewportY !== this._lastViewportY) {
           this._lastViewportY = currentViewportY;
-          this._scheduleDecoRefresh();
+          this._scheduleScrollDecoRefresh();
         }
       }),
     );
@@ -390,7 +393,7 @@ export class ActionLinksAddon implements ITerminalAddon, ILinkProvider {
     this._matchers.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
     this._cache.clear();
     this._clearAllDecorations();
-    this._scheduleDecoRefresh();
+    this._scheduleWriteDecoRefresh();
     return { dispose: () => this.unregisterMatcher(matcher.id) };
   }
 
@@ -398,14 +401,14 @@ export class ActionLinksAddon implements ITerminalAddon, ILinkProvider {
     this._matchers = this._matchers.filter((m) => m.id !== id);
     this._cache.clear();
     this._clearAllDecorations();
-    this._scheduleDecoRefresh();
+    this._scheduleWriteDecoRefresh();
   }
 
   setMatchers(matchers: ActionMatcher[]): void {
     this._matchers = [...matchers].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
     this._cache.clear();
     this._clearAllDecorations();
-    this._scheduleDecoRefresh();
+    this._scheduleWriteDecoRefresh();
   }
 
   getMatchers(): readonly ActionMatcher[] {
@@ -423,7 +426,7 @@ export class ActionLinksAddon implements ITerminalAddon, ILinkProvider {
     }
 
     this._cache.clear();
-    this._scheduleDecoRefresh();
+    this._scheduleWriteDecoRefresh();
   }
 
   setOptions(options: Partial<ActionLinksAddonOptions>): void {
@@ -466,11 +469,16 @@ export class ActionLinksAddon implements ITerminalAddon, ILinkProvider {
 
   /* ── Decoration layer ────────────────────────────────────────────────────── */
 
-  private _clearDecoTimer(): void {
-    if (this._decoTimer) {
-      clearTimeout(this._decoTimer);
-      this._decoTimer = null;
+  private _clearAllDecoTimers(): void {
+    if (this._writeDecoTimer) {
+      clearTimeout(this._writeDecoTimer);
+      this._writeDecoTimer = null;
     }
+    if (this._scrollThrottleTimer) {
+      clearTimeout(this._scrollThrottleTimer);
+      this._scrollThrottleTimer = null;
+    }
+    this._scrollThrottlePending = false;
   }
 
   private _disposeSentinel(): void {
@@ -498,14 +506,37 @@ export class ActionLinksAddon implements ITerminalAddon, ILinkProvider {
     });
   }
 
-  private _scheduleDecoRefresh(): void {
-    if (this._suspended || this._matchers.length === 0) return;
-    this._clearDecoTimer();
-    this._decoTimer = setTimeout(() => {
-      this._decoTimer = null;
+  private _canRefreshDeco(): boolean {
+    return !this._suspended && this._matchers.length > 0;
+  }
+
+  /** Debounced refresh for write/resize/matcher-change events. */
+  private _scheduleWriteDecoRefresh(): void {
+    if (!this._canRefreshDeco()) return;
+    if (this._writeDecoTimer) clearTimeout(this._writeDecoTimer);
+    this._writeDecoTimer = setTimeout(() => {
+      this._writeDecoTimer = null;
       const term = this._terminal;
       if (term) this._refreshDecorations(term);
     }, ActionLinksAddon.DECORATION_DEBOUNCE_MS);
+  }
+
+  /** Leading+trailing throttle for scroll events. */
+  private _scheduleScrollDecoRefresh(): void {
+    if (!this._canRefreshDeco()) return;
+    if (this._scrollThrottleTimer !== null) {
+      this._scrollThrottlePending = true;
+      return;
+    }
+    const term = this._terminal;
+    if (term) this._refreshDecorations(term);
+    this._scrollThrottleTimer = setTimeout(() => {
+      this._scrollThrottleTimer = null;
+      if (this._scrollThrottlePending) {
+        this._scrollThrottlePending = false;
+        this._scheduleScrollDecoRefresh();
+      }
+    }, ActionLinksAddon.DECORATION_THROTTLE_MS);
   }
 
   private _refreshDecorations(terminal: Terminal): void {
@@ -650,7 +681,7 @@ export class ActionLinksAddon implements ITerminalAddon, ILinkProvider {
   }
 
   private _clearAllDecorations(): void {
-    this._clearDecoTimer();
+    this._clearAllDecoTimers();
     const entries = [...this._decoCache.values()];
     this._cache.clear();
     this._decoCache.clear();

@@ -51,7 +51,9 @@ export class KeywordHighlighter implements IDisposable {
   private lineToKeys = new Map<number, string[]>();
   /** Lines that have been fully scanned and whose results are memoized in lineToKeys. */
   private scannedLines = new Set<number>();
-  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private writeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private scrollThrottleTimer: ReturnType<typeof setTimeout> | null = null;
+  private scrollThrottlePending = false;
   private enabled = false;
   private suspended = false;
   private highlightAcrossWrappedLines = false;
@@ -74,22 +76,17 @@ export class KeywordHighlighter implements IDisposable {
     this.term = term;
 
     this.disposables.push(
-      // Refresh when new output arrives
-      this.term.onWriteParsed(() => this.triggerRefresh()),
-      // Refresh on terminal resize (column/row count changes)
+      this.term.onWriteParsed(() => this.triggerWriteRefresh()),
       this.term.onResize(() => {
         this.clearAllDecorations();
         this.lastViewportY = -1;
-        this.triggerRefresh();
+        this.triggerWriteRefresh();
       }),
-      // onRender fires after every render cycle (cursor blink, scroll, data flush).
-      // Viewport Y check avoids redundant work on cursor-blink-only redraws, and
-      // makes a separate onScroll listener unnecessary.
       this.term.onRender(() => {
         const currentViewportY = this.term.buffer.active?.viewportY ?? 0;
         if (currentViewportY !== this.lastViewportY) {
           this.lastViewportY = currentViewportY;
-          this.triggerRefresh();
+          this.triggerScrollRefresh();
         }
       }),
     );
@@ -106,20 +103,37 @@ export class KeywordHighlighter implements IDisposable {
     this.compiledRules = [];
     for (const rule of rules) {
       if (!rule.enabled || rule.patterns.length === 0) continue;
+      const validAlts: string[] = [];
       for (const pattern of rule.patterns) {
         const trimmed = pattern.trim();
         if (!trimmed) continue;
         try {
-          this.compiledRules.push({ regex: new RegExp(trimmed, "gi"), color: rule.color });
+          new RegExp(trimmed, "gi");
+          validAlts.push(trimmed);
         } catch {
           // silently skip invalid regex
+        }
+      }
+      if (validAlts.length === 0) continue;
+      const combined =
+        validAlts.length === 1 ? validAlts[0] : validAlts.map((p) => `(?:${p})`).join("|");
+      try {
+        this.compiledRules.push({ regex: new RegExp(combined, "gi"), color: rule.color });
+      } catch {
+        // fallback: compile each pattern individually
+        for (const alt of validAlts) {
+          try {
+            this.compiledRules.push({ regex: new RegExp(alt, "gi"), color: rule.color });
+          } catch {
+            // skip
+          }
         }
       }
     }
 
     this.clearAllDecorations();
     if (this.enabled && this.compiledRules.length > 0) {
-      this.triggerRefresh();
+      this.triggerWriteRefresh();
     }
   }
 
@@ -134,7 +148,7 @@ export class KeywordHighlighter implements IDisposable {
 
     if (this.enabled && this.compiledRules.length > 0) {
       this.lastViewportY = -1;
-      this.triggerRefresh();
+      this.triggerWriteRefresh();
     }
   }
 
@@ -146,11 +160,16 @@ export class KeywordHighlighter implements IDisposable {
     this.disposables = [];
   }
 
-  private clearRefreshTimer(): void {
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-      this.debounceTimer = null;
+  private clearAllTimers(): void {
+    if (this.writeDebounceTimer) {
+      clearTimeout(this.writeDebounceTimer);
+      this.writeDebounceTimer = null;
     }
+    if (this.scrollThrottleTimer) {
+      clearTimeout(this.scrollThrottleTimer);
+      this.scrollThrottleTimer = null;
+    }
+    this.scrollThrottlePending = false;
   }
 
   /**
@@ -182,19 +201,44 @@ export class KeywordHighlighter implements IDisposable {
     this.sentinelDisposable = null;
   }
 
-  private triggerRefresh(): void {
-    if (!this.enabled || this.suspended || this.compiledRules.length === 0) return;
-
+  private canRefresh(): boolean {
+    if (!this.enabled || this.suspended || this.compiledRules.length === 0) return false;
     if (this.term.buffer.active.type === "alternate") {
       this.clearAllDecorations();
-      return;
+      return false;
     }
+    return true;
+  }
 
-    this.clearRefreshTimer();
-    this.debounceTimer = setTimeout(() => {
-      this.debounceTimer = null;
+  /** Debounced refresh for write/resize events (batches rapid output). */
+  private triggerWriteRefresh(): void {
+    if (!this.canRefresh()) return;
+    if (this.writeDebounceTimer) clearTimeout(this.writeDebounceTimer);
+    this.writeDebounceTimer = setTimeout(() => {
+      this.writeDebounceTimer = null;
       this.refreshViewport();
     }, XTERM_PERFORMANCE_CONFIG.highlighting.debounceMs);
+  }
+
+  /**
+   * Leading+trailing throttle for scroll events. Fires immediately on the
+   * first scroll, then at most once per throttle interval during continuous
+   * scrolling, with a trailing call after scrolling stops.
+   */
+  private triggerScrollRefresh(): void {
+    if (!this.canRefresh()) return;
+    if (this.scrollThrottleTimer !== null) {
+      this.scrollThrottlePending = true;
+      return;
+    }
+    this.refreshViewport();
+    this.scrollThrottleTimer = setTimeout(() => {
+      this.scrollThrottleTimer = null;
+      if (this.scrollThrottlePending) {
+        this.scrollThrottlePending = false;
+        this.triggerScrollRefresh();
+      }
+    }, XTERM_PERFORMANCE_CONFIG.highlighting.throttleMs);
   }
 
   /**
@@ -204,7 +248,7 @@ export class KeywordHighlighter implements IDisposable {
    * a rule change, and tears down the trim-detection sentinel.
    */
   private clearAllDecorations(): void {
-    this.clearRefreshTimer();
+    this.clearAllTimers();
     const entries = [...this.decorationCache.values()];
     this.decorationCache.clear();
     this.lineToKeys.clear();
@@ -584,15 +628,23 @@ export class KeywordHighlighter implements IDisposable {
       if (!line) continue;
 
       if (!this.highlightAcrossWrappedLines) {
-        // Scrollback lines (lineY < screenStartY) are immutable once written.
-        // Re-use the memoized match result to avoid re-running regex + cell reads.
-        // Screen lines (lineY >= screenStartY) can still be modified, always re-scan them.
         if (lineY < screenStartY && this.scannedLines.has(lineY)) {
           const cached = this.lineToKeys.get(lineY);
           if (cached) {
-            for (const k of cached) requiredKeys.add(k);
+            let stale = false;
+            for (const k of cached) {
+              if (this.decorationCache.has(k)) {
+                requiredKeys.add(k);
+              } else {
+                stale = true;
+              }
+            }
+            if (!stale) continue;
+            this.scannedLines.delete(lineY);
+            this.lineToKeys.delete(lineY);
+          } else {
+            continue;
           }
-          continue;
         }
 
         const lineKeys = this.scanPhysicalLine(
@@ -621,9 +673,20 @@ export class KeywordHighlighter implements IDisposable {
       if (canMemoize && this.scannedLines.has(lineY)) {
         const cached = this.lineToKeys.get(lineY);
         if (cached) {
-          for (const k of cached) requiredKeys.add(k);
+          let stale = false;
+          for (const k of cached) {
+            if (this.decorationCache.has(k)) {
+              requiredKeys.add(k);
+            } else {
+              stale = true;
+            }
+          }
+          if (!stale) continue;
+          this.scannedLines.delete(lineY);
+          this.lineToKeys.delete(lineY);
+        } else {
+          continue;
         }
-        continue;
       }
 
       // Wrapped-line mode can span multiple physical lines, so a logical line that

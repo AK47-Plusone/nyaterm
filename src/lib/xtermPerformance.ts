@@ -1,7 +1,9 @@
 export const XTERM_PERFORMANCE_CONFIG = {
   highlighting: {
-    /** Debounce delay in ms before re-scanning the visible viewport. */
+    /** Debounce delay in ms before re-scanning after new output is written. */
     debounceMs: 80,
+    /** Throttle interval in ms for scroll-triggered viewport refreshes. */
+    throttleMs: 80,
   },
   output: {
     /** Max characters to write into xterm in a single call. */
