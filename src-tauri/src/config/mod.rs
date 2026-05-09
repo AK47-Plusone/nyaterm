@@ -5,6 +5,7 @@
 
 mod cloud_sync;
 mod connection;
+mod credential;
 mod key;
 mod otp;
 mod password;
@@ -26,6 +27,11 @@ pub use cloud_sync::{
 pub use connection::{
     load_config, load_connection_by_id, load_sessions, save_config, save_sessions, AppConfig,
     ConnectionAuth, ConnectionNetwork, ConnectionType, Group, SavedConnection, SessionsConfig,
+};
+#[allow(unused_imports)]
+pub use credential::{
+    load_credential_by_id, load_credentials, save_credentials, upsert_credential,
+    CredentialsConfig, SavedCredential,
 };
 #[allow(unused_imports)]
 pub use key::{decrypt_key_pem, load_key_by_id, load_keys, save_keys, KeysConfig, SshKey};

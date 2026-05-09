@@ -25,6 +25,7 @@ pub const JSON_SETTINGS: &str = "settings";
 pub const JSON_SESSIONS: &str = "sessions";
 pub const JSON_KEYS: &str = "keys";
 pub const JSON_PASSWORDS: &str = "passwords";
+pub const JSON_CREDENTIALS: &str = "credentials";
 pub const JSON_OTP: &str = "otp";
 pub const JSON_PROXIES: &str = "proxies";
 pub const JSON_TUNNELS: &str = "tunnels";
@@ -45,6 +46,7 @@ const LEGACY_JSON_FILES: &[(&str, &str)] = &[
     ("sessions.json", JSON_SESSIONS),
     ("keys.json", JSON_KEYS),
     ("passwords.json", JSON_PASSWORDS),
+    ("credentials.json", JSON_CREDENTIALS),
     ("otp.json", JSON_OTP),
     ("proxies.json", JSON_PROXIES),
     ("tunnels.json", JSON_TUNNELS),

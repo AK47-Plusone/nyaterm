@@ -113,6 +113,22 @@ export interface SavedPassword {
   password?: string;
 }
 
+/** Terminal credential entry used for prompt-based autofill. */
+export interface SavedCredential {
+  id: string;
+  name: string;
+  username: string;
+  /** Plaintext password (only sent when creating/updating). */
+  password?: string;
+  /** Optional JavaScript regex source for username prompts. */
+  username_prompt_regex?: string | null;
+  /** Optional JavaScript regex source for password prompts. */
+  password_prompt_regex?: string | null;
+  enabled: boolean;
+  /** True when encrypted password data exists in local storage. */
+  has_password?: boolean;
+}
+
 /** Auth block for SSH connections. */
 export interface ConnectionAuth {
   mode: string;

@@ -11,6 +11,7 @@ import { useTerminalAppSettings } from "@/context/AppContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useActionLinks } from "@/hooks/useActionLinks";
 import { useCommandHistory } from "@/hooks/useCommandHistory";
+import { useCredentialAutofill } from "@/hooks/useCredentialAutofill";
 import { useKeywordHighlighter } from "@/hooks/useKeywordHighlighter";
 import { useShellIntegration } from "@/hooks/useShellIntegration";
 import { useTerminalSearch } from "@/hooks/useTerminalSearch";
@@ -43,6 +44,7 @@ import { Input } from "../ui/input";
 import ActionLinkMenu from "./ActionLinkMenu";
 import ActionLinkTooltip from "./ActionLinkTooltip";
 import CommandSuggestions from "./CommandSuggestions";
+import CredentialSuggestions from "./CredentialSuggestions";
 import TerminalContextMenu from "./TerminalContextMenu";
 import TerminalGutter from "./TerminalGutter";
 import TerminalSearchBar from "./TerminalSearchBar";
@@ -217,6 +219,7 @@ export default function XTerminal({
   const syncPeerSessionIdsRef = useRef(syncPeerSessionIds);
   const riskUsernameRef = useRef(riskUsername);
   const visibleRef = useRef(visible);
+  const activeRef = useRef(active);
   const performanceModeRef = useRef<PerformanceMode>("normal");
   const performanceOverlayTimerRef = useRef<number | null>(null);
   const skippedOutputCharsRef = useRef(0);
@@ -244,6 +247,10 @@ export default function XTerminal({
   useEffect(() => {
     riskUsernameRef.current = riskUsername;
   }, [riskUsername]);
+
+  useEffect(() => {
+    activeRef.current = active;
+  }, [active]);
 
   useEffect(() => {
     sessionIdRef.current = sessionId;
@@ -361,7 +368,22 @@ export default function XTerminal({
     commandSuggestionMaxChars,
   );
 
+  const {
+    panelState: credentialPanelState,
+    selectedIndex: credentialSelectedIndex,
+    setSelectedIndex: setCredentialSelectedIndex,
+    cursorPosition: credentialCursorPosition,
+    showPanelRef: credentialShowPanelRef,
+    matchesRef: credentialMatchesRef,
+    selectedIndexRef: credentialSelectedIndexRef,
+    feedOutput: feedCredentialOutput,
+    handleSelect: handleCredentialSelect,
+    dismiss: dismissCredentialPanel,
+    reset: resetCredentialAutofill,
+  } = useCredentialAutofill(terminalRef, sessionIdRef, activeRef, visibleRef, performanceModeRef);
+
   // Create and setup terminal
+  // biome-ignore lint/correctness/useExhaustiveDependencies: terminal lifecycle is intentionally scoped to session changes.
   useEffect(() => {
     if (!containerRef.current) return;
     setTerminalReady(false);
@@ -372,6 +394,7 @@ export default function XTerminal({
     outputWriteInFlightRef.current = false;
     outputWriteQueueRef.current = Promise.resolve();
     performanceModeRef.current = "normal";
+    resetCredentialAutofill();
     setPerformanceMode("normal");
     setPerformanceOverlay(null);
     setSkippedOutputChars(0);
@@ -968,6 +991,7 @@ export default function XTerminal({
         if (!isTerminalAlive()) return;
         queuedOutputChunksRef.current.push(event.payload);
         queuedOutputCharsRef.current += event.payload.length;
+        feedCredentialOutput(event.payload);
         if (visibleRef.current && hasErrorKeyword(event.payload)) {
           const now = Date.now();
           if (now - lastErrorNoticeAtRef.current > 30_000) {
@@ -1065,6 +1089,35 @@ export default function XTerminal({
             });
         }
         return;
+      }
+
+      if (credentialShowPanelRef.current && credentialMatchesRef.current.length > 0) {
+        if (data === "\x1b[A") {
+          const cur = credentialSelectedIndexRef.current;
+          const len = credentialMatchesRef.current.length;
+          const next = cur <= 0 ? len - 1 : cur - 1;
+          credentialSelectedIndexRef.current = next;
+          setCredentialSelectedIndex(next);
+          return;
+        }
+        if (data === "\x1b[B") {
+          const cur = credentialSelectedIndexRef.current;
+          const len = credentialMatchesRef.current.length;
+          const next = cur >= len - 1 ? 0 : cur + 1;
+          credentialSelectedIndexRef.current = next;
+          setCredentialSelectedIndex(next);
+          return;
+        }
+        if (data === "\r" && credentialSelectedIndexRef.current >= 0) {
+          const selected = credentialMatchesRef.current[credentialSelectedIndexRef.current];
+          if (selected) void handleCredentialSelect(selected);
+          return;
+        }
+        if (data === "\x1b") {
+          dismissCredentialPanel();
+          return;
+        }
+        dismissCredentialPanel();
       }
 
       if (
@@ -1231,6 +1284,7 @@ export default function XTerminal({
       continueRiskCommandRef.current = null;
       replaceInputCommandRef.current = null;
       riskCheckPendingRef.current = false;
+      resetCredentialAutofill();
 
       oscDisposable.dispose();
       writeParsedDisposable.dispose();
@@ -1373,7 +1427,6 @@ export default function XTerminal({
     !!riskPrompt &&
     !riskPrompt.risk.blocked &&
     (!riskConfirmText || riskConfirmValue.trim() === riskConfirmText);
-
   return (
     <div className="h-full w-full relative flex" style={{ display: visible ? "flex" : "none" }}>
       {showGutter && terminalReady && (
@@ -1455,6 +1508,14 @@ export default function XTerminal({
           cursorPosition={cursorPosition}
           onSelect={handleSelectSuggestion}
           onDismiss={dismissSuggestions}
+        />
+
+        <CredentialSuggestions
+          panelState={credentialPanelState}
+          selectedIndex={credentialSelectedIndex}
+          cursorPosition={credentialCursorPosition}
+          onSelect={(credential) => void handleCredentialSelect(credential)}
+          onDismiss={dismissCredentialPanel}
         />
 
         <ActionLinkTooltip state={tooltipState} />

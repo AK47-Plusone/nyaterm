@@ -192,6 +192,13 @@ pub fn build_portable_snapshot(
         )?,
     );
     json_docs.insert(
+        crate::storage::JSON_CREDENTIALS.to_string(),
+        read_json_doc_or_default(
+            crate::storage::JSON_CREDENTIALS,
+            &serde_json::to_string_pretty(&config::CredentialsConfig::default())?,
+        )?,
+    );
+    json_docs.insert(
         crate::storage::JSON_OTP.to_string(),
         read_json_doc_or_default(
             crate::storage::JSON_OTP,
@@ -405,6 +412,7 @@ fn is_snapshot_json_doc_key(key: &str) -> bool {
         crate::storage::JSON_SESSIONS
             | crate::storage::JSON_KEYS
             | crate::storage::JSON_PASSWORDS
+            | crate::storage::JSON_CREDENTIALS
             | crate::storage::JSON_OTP
             | crate::storage::JSON_PROXIES
             | crate::storage::JSON_TUNNELS
@@ -469,8 +477,9 @@ impl Drop for TempRedbFile {
 #[cfg(test)]
 mod tests {
     use super::{
-        calculate_payload_hash, encode_portable_snapshot, PortableAppSettings, PortableSnapshot,
-        PortableSnapshotKind, PortableUiSettings, PORTABLE_SNAPSHOT_SCHEMA_VERSION,
+        calculate_payload_hash, encode_portable_snapshot, is_snapshot_json_doc_key,
+        PortableAppSettings, PortableSnapshot, PortableSnapshotKind, PortableUiSettings,
+        PORTABLE_SNAPSHOT_SCHEMA_VERSION,
     };
     use crate::config::{self, ActivityBarLayout, AppSettings};
     use std::collections::BTreeMap;
@@ -514,6 +523,11 @@ mod tests {
             calculate_payload_hash(&left_json, &text_docs).expect("left hash"),
             calculate_payload_hash(&right_json, &text_docs).expect("right hash")
         );
+    }
+
+    #[test]
+    fn portable_snapshot_accepts_credentials_doc() {
+        assert!(is_snapshot_json_doc_key(crate::storage::JSON_CREDENTIALS));
     }
 
     #[test]
