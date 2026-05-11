@@ -15,10 +15,7 @@ body:
     attributes:
       value: |
         This issue form is for reporting bugs only!
-
-        If you have a feature or enhancement request, please use the [feature request][fr] section of our [GitHub Discussions][fr].
-
-        [fr]: https://github.com/nyakang/nyaterm/discussions/new?category=feature-request
+        If you have a feature or enhancement request, please use the [feature request][https://github.com/nyakang/nyaterm/issues/new?template=feature_request.yml].
 
   - type: textarea
     id: bug
