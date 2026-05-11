@@ -210,7 +210,7 @@ pub struct UiConfig {
     pub zoom_level: f64,
     #[serde(default = "default_language")]
     pub language: Option<String>,
-    #[serde(default = "default_false")]
+    #[serde(default = "default_true_fn")]
     pub show_remote_stats: bool,
     #[serde(default = "default_remote_stats_interval")]
     pub remote_stats_interval: u32,
@@ -286,7 +286,7 @@ impl Default for UiConfig {
             serial_send_height: default_serial_send_height(),
             zoom_level: default_zoom(),
             language: default_language(),
-            show_remote_stats: false,
+            show_remote_stats: true,
             remote_stats_interval: default_remote_stats_interval(),
             saved_connections_sort_mode: default_sort_mode(),
             recent_connection_ids: vec![],

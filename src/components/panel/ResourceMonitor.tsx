@@ -119,7 +119,7 @@ export default function ResourceMonitor({ activeSessionId }: ResourceMonitorProp
   const fetchingRef = useRef(false);
   const failCountRef = useRef(0);
 
-  const enabled = appSettings.ui.show_remote_stats ?? false;
+  const enabled = appSettings.ui.show_remote_stats ?? true;
   const pollIntervalMs = Math.max(1, appSettings.ui.remote_stats_interval ?? 3) * 1000;
 
   const fetchStats = useCallback(async (sessionId: string, manual = false) => {
