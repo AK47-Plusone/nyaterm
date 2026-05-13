@@ -1,4 +1,7 @@
 use super::super::{default_false, default_true};
+use crate::utils::fonts::{
+    normalize_terminal_font_family, DEFAULT_TERMINAL_FONT_FAMILY, DEFAULT_UI_FONT_FAMILY,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -7,6 +10,8 @@ pub struct AppearanceSettings {
     pub theme: String,
     #[serde(default = "default_font")]
     pub font_family: String,
+    #[serde(default = "default_ui_font")]
+    pub ui_font_family: String,
     #[serde(default = "default_font_size")]
     pub font_size: f64,
     #[serde(default = "default_false")]
@@ -27,7 +32,10 @@ fn default_app_theme() -> String {
     "github-dark".to_string()
 }
 fn default_font() -> String {
-    "JetBrains Mono, 'Noto Sans SC Variable', Consolas, monospace".to_string()
+    DEFAULT_TERMINAL_FONT_FAMILY.to_string()
+}
+fn default_ui_font() -> String {
+    DEFAULT_UI_FONT_FAMILY.to_string()
 }
 fn default_font_size() -> f64 {
     16.0
@@ -47,6 +55,7 @@ impl Default for AppearanceSettings {
         Self {
             theme: default_app_theme(),
             font_family: default_font(),
+            ui_font_family: default_ui_font(),
             font_size: default_font_size(),
             ligatures: false,
             background_opacity: default_opacity(),
@@ -55,5 +64,16 @@ impl Default for AppearanceSettings {
             ui_font_size: default_ui_font_size(),
             terminal_theme: None,
         }
+    }
+}
+
+impl AppearanceSettings {
+    pub fn normalize_terminal_font_family(&mut self) -> bool {
+        let normalized = normalize_terminal_font_family(&self.font_family);
+        if normalized == self.font_family.trim() {
+            return false;
+        }
+        self.font_family = normalized;
+        true
     }
 }

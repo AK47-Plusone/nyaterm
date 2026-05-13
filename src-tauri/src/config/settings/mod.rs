@@ -75,10 +75,17 @@ pub fn load_app_settings(app: &AppHandle) -> AppResult<AppSettings> {
         .is_some();
 
     let mut migrated = false;
+    let mut secrets_ready_for_persist = true;
 
     if has_embedded_cloud_sync {
-        settings.cloud_sync =
-            decrypt_cloud_sync_settings(settings.cloud_sync.clone()).unwrap_or(settings.cloud_sync);
+        match decrypt_cloud_sync_settings(settings.cloud_sync.clone()) {
+            Ok(cloud_sync) => {
+                settings.cloud_sync = cloud_sync;
+            }
+            Err(_) => {
+                secrets_ready_for_persist = false;
+            }
+        }
     } else if let Ok(legacy_cloud_sync) =
         load_cloud_sync_settings(app).and_then(decrypt_cloud_sync_settings)
     {
@@ -86,10 +93,18 @@ pub fn load_app_settings(app: &AppHandle) -> AppResult<AppSettings> {
         migrated = true;
     }
 
-    if let Ok(ai_settings) = decrypt_ai_settings(settings.ai.clone()) {
-        settings.ai = ai_settings;
+    match decrypt_ai_settings(settings.ai.clone()) {
+        Ok(ai_settings) => {
+            settings.ai = ai_settings;
+        }
+        Err(_) => {
+            secrets_ready_for_persist = false;
+        }
     }
     if normalize_ai_settings(&mut settings.ai) {
+        migrated = true;
+    }
+    if settings.appearance.normalize_terminal_font_family() {
         migrated = true;
     }
 
@@ -235,14 +250,25 @@ pub fn load_app_settings(app: &AppHandle) -> AppResult<AppSettings> {
         }
     }
 
-    if migrated {
-        let mut persisted = settings.clone();
-        persisted.cloud_sync = encrypt_cloud_sync_settings(persisted.cloud_sync.clone())?;
-        persisted.ai = encrypt_ai_settings(persisted.ai.clone())?;
-        let _ = save_app_settings(app, &persisted);
+    if migrated && secrets_ready_for_persist {
+        persist_migrated_app_settings(app, &settings);
     }
 
     Ok(settings)
+}
+
+fn persist_migrated_app_settings(app: &AppHandle, settings: &AppSettings) {
+    let mut persisted = settings.clone();
+    let Ok(cloud_sync) = encrypt_cloud_sync_settings(persisted.cloud_sync.clone()) else {
+        return;
+    };
+    let Ok(ai) = encrypt_ai_settings(persisted.ai.clone()) else {
+        return;
+    };
+
+    persisted.cloud_sync = cloud_sync;
+    persisted.ai = ai;
+    let _ = save_app_settings(app, &persisted);
 }
 
 pub fn save_app_settings(app: &AppHandle, config: &AppSettings) -> AppResult<()> {

@@ -3,6 +3,7 @@ use crate::core::CloudSyncManager;
 use crate::error::AppResult;
 use crate::observability::{self, StructuredLog, StructuredLogLevel};
 use crate::utils::crypto;
+use crate::utils::fonts::{list_system_font_families, list_system_font_infos, FontInfo};
 use std::sync::Arc;
 use tauri::Emitter;
 
@@ -14,13 +15,12 @@ fn schedule_cloud_sync_notify(app: tauri::AppHandle) {
 
 #[tauri::command]
 pub fn get_system_fonts() -> Vec<String> {
-    use font_kit::source::SystemSource;
-    if let Ok(mut families) = SystemSource::new().all_families() {
-        families.sort();
-        families.dedup();
-        return families;
-    }
-    Vec::new()
+    list_system_font_families()
+}
+
+#[tauri::command]
+pub fn get_system_font_infos() -> Vec<FontInfo> {
+    list_system_font_infos()
 }
 
 #[tauri::command]
@@ -59,6 +59,8 @@ pub async fn persist_app_settings(
     manager: &Arc<CloudSyncManager>,
     mut settings: config::AppSettings,
 ) -> AppResult<()> {
+    settings.appearance.normalize_terminal_font_family();
+
     let existing = match config::load_app_settings(app) {
         Ok(existing) => existing,
         Err(error) => {

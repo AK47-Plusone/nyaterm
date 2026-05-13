@@ -22,7 +22,8 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
   appearance: {
     theme: "github-dark",
     terminal_theme: "default",
-    font_family: "JetBrains Mono, 'Noto Sans SC Variable', Consolas, monospace, Inter",
+    font_family: 'JetBrains Mono, Consolas, "Cascadia Mono", monospace',
+    ui_font_family: 'JetBrains Mono, "Noto Sans SC Variable", Inter, sans-serif',
     font_size: DEFAULT_TERMINAL_FONT_SIZE,
     ligatures: false,
     background_opacity: 1.0,
@@ -160,6 +161,12 @@ export function ChildAppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.style.fontSize = `${appSettings.appearance.ui_font_size}px`;
   }, [appSettings.appearance.ui_font_size]);
+
+  useEffect(() => {
+    const fontFamily = appSettings.appearance.ui_font_family;
+    document.documentElement.style.setProperty("--font-sans", fontFamily);
+    document.documentElement.style.setProperty("--font-display", fontFamily);
+  }, [appSettings.appearance.ui_font_family]);
 
   useEffect(() => {
     if (appSettings.ui?.language && appSettings.ui.language !== i18n.language) {

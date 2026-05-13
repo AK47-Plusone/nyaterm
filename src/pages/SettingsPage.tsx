@@ -208,7 +208,12 @@ export default function SettingsPage() {
     },
     { id: "security", label: t("settings.security"), icon: "security", Component: SecurityTab },
     { id: "syncBackup", label: t("settings.syncBackup"), icon: "backup" },
-    { id: "terminal-general", label: t("settings.general"), icon: "settings", Component: TerminalTab },
+    {
+      id: "terminal-general",
+      label: t("settings.general"),
+      icon: "settings",
+      Component: TerminalTab,
+    },
     {
       id: "interaction",
       label: t("settings.interaction"),
@@ -342,7 +347,7 @@ export default function SettingsPage() {
   return (
     <div
       className="h-full min-h-0 flex flex-col overflow-hidden"
-      style={{ fontFamily: committedSettings.appearance.font_family }}
+      style={{ fontFamily: committedSettings.appearance.ui_font_family }}
     >
       <ChildWindowHeader
         title={t("settings.title")}

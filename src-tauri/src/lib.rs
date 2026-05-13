@@ -65,6 +65,7 @@ pub fn run() {
             cmd::log::append_frontend_logs,
             cmd::log::export_diagnostics,
             cmd::settings::get_system_fonts,
+            cmd::settings::get_system_font_infos,
             cmd::cloud_sync::test_cloud_sync_connection,
             cmd::cloud_sync::get_cloud_sync_status,
             cmd::cloud_sync::sync_push_now,

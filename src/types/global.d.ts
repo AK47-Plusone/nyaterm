@@ -374,6 +374,7 @@ export interface GeneralSettings {
 export interface AppearanceSettings {
   theme: string;
   font_family: string;
+  ui_font_family: string;
   font_size: number;
   ligatures: boolean;
   background_opacity: number;
