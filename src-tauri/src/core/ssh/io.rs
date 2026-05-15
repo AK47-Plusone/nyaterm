@@ -1,6 +1,7 @@
 use super::client::{SshHandle, SshHandler};
 use crate::core::capture::OutputCaptureProcessor;
 use crate::core::ssh::osc::{self, OscStripper, ShellKind};
+use crate::core::zmodem::{ZmodemAction, ZmodemDetector, ZmodemEvent, ZmodemTransfer};
 use crate::core::{
     update_cwd_if_changed, RecordingManager, SessionCommand, SessionManager,
     SessionOutputCoalescer, SharedCwd,
@@ -163,6 +164,10 @@ pub(super) async fn ssh_io_loop(
     let mut remote_exit_status: Option<u32> = None;
     let mut remote_exit_signal: Option<String> = None;
 
+    let mut zmodem_detector = ZmodemDetector::new();
+    let mut zmodem_transfer: Option<ZmodemTransfer> = None;
+    let zmodem_event_name = format!("zmodem-event-{session_id}");
+
     let inject_deadline = tokio::time::sleep(std::time::Duration::from_secs(INJECT_TIMEOUT_SECS));
     tokio::pin!(inject_deadline);
 
@@ -176,6 +181,9 @@ pub(super) async fn ssh_io_loop(
                         output.attach();
                     }
                     Some(SessionCommand::Write(data)) => {
+                        if zmodem_transfer.is_some() {
+                            continue;
+                        }
                         if let Some(ref recorder) = recording_mgr {
                             recorder.write_input(&session_id, &data);
                         }
@@ -192,6 +200,31 @@ pub(super) async fn ssh_io_loop(
                         let _ = channel.close().await;
                         break "local-close-request";
                     }
+                    Some(SessionCommand::ZmodemAcceptDownload { save_dir }) => {
+                        if let Some(ref mut transfer) = zmodem_transfer {
+                            let actions = transfer.accept_download(save_dir);
+                            handle_zmodem_actions(&app, &zmodem_event_name, &mut channel, actions).await;
+                            if transfer.is_done() {
+                                zmodem_transfer = None;
+                            }
+                        }
+                    }
+                    Some(SessionCommand::ZmodemAcceptUpload { files }) => {
+                        if let Some(ref mut transfer) = zmodem_transfer {
+                            let actions = transfer.accept_upload(files);
+                            handle_zmodem_actions(&app, &zmodem_event_name, &mut channel, actions).await;
+                            if transfer.is_done() {
+                                zmodem_transfer = None;
+                            }
+                        }
+                    }
+                    Some(SessionCommand::ZmodemCancel) => {
+                        if let Some(ref mut transfer) = zmodem_transfer {
+                            let actions = transfer.cancel();
+                            handle_zmodem_actions(&app, &zmodem_event_name, &mut channel, actions).await;
+                        }
+                        zmodem_transfer = None;
+                    }
                     None => {
                         let _ = channel.close().await;
                         break "session-command-channel-closed";
@@ -201,6 +234,39 @@ pub(super) async fn ssh_io_loop(
             msg = channel.wait() => {
                 match msg {
                     Some(ChannelMsg::Data { ref data }) => {
+                        // ZMODEM: if a transfer is active, route raw bytes to it.
+                        if let Some(ref mut transfer) = zmodem_transfer {
+                            let actions = transfer.feed_incoming(data);
+                            handle_zmodem_actions(&app, &zmodem_event_name, &mut channel, actions).await;
+                            if transfer.is_done() {
+                                zmodem_transfer = None;
+                                zmodem_detector.reset();
+                            }
+                            continue;
+                        }
+
+                        // ZMODEM: detect header in raw bytes before lossy UTF-8 conversion.
+                        if phase == IoPhase::Normal {
+                            if let Some((direction, header_offset)) = zmodem_detector.feed(data) {
+                                // Forward any pre-header bytes to the terminal.
+                                if header_offset > 0 {
+                                    let pre = String::from_utf8_lossy(&data[..header_offset]).to_string();
+                                    if !pre.is_empty() {
+                                        output.push_owned(pre);
+                                    }
+                                }
+                                let transfer = ZmodemTransfer::new(direction, &data[header_offset..]);
+                                zmodem_transfer = Some(transfer);
+                                let _ = app.emit(&zmodem_event_name, &ZmodemEvent::Detected { direction });
+                                tracing::info!(
+                                    session_id = %session_id,
+                                    ?direction,
+                                    "ZMODEM transfer detected"
+                                );
+                                continue;
+                            }
+                        }
+
                         let text = String::from_utf8_lossy(data).to_string();
                         let mut result = stripper.push(&text);
 
@@ -346,6 +412,24 @@ pub(super) async fn ssh_io_loop(
         "SSH session closed"
     );
     let _ = app.emit(&closed_event, ());
+}
+
+async fn handle_zmodem_actions(
+    app: &AppHandle,
+    event_name: &str,
+    channel: &mut russh::Channel<client::Msg>,
+    actions: Vec<ZmodemAction>,
+) {
+    for action in actions {
+        match action {
+            ZmodemAction::SendToRemote(data) => {
+                let _ = channel.data(&data[..]).await;
+            }
+            ZmodemAction::EmitEvent(event) => {
+                let _ = app.emit(event_name, &event);
+            }
+        }
+    }
 }
 
 /// Helper: emit visible text + CWD updates from an [`OscResult`].

@@ -3,6 +3,7 @@
 use super::session::{
     SessionCommand, SessionHandle, SessionInfo, SessionManager, SessionType, SharedCwd,
 };
+use super::zmodem::{ZmodemAction, ZmodemDetector, ZmodemEvent, ZmodemTransfer};
 use crate::core::capture::OutputCaptureProcessor;
 use crate::core::SessionOutputCoalescer;
 use crate::error::AppResult;
@@ -210,6 +211,12 @@ async fn telnet_session_task(
     let capture_processor = Arc::new(TokioMutex::new(OutputCaptureProcessor::new()));
     let capture_for_reader = capture_processor.clone();
 
+    let zmodem_state: Arc<TokioMutex<Option<ZmodemTransfer>>> = Arc::new(TokioMutex::new(None));
+    let zmodem_state_reader = zmodem_state.clone();
+    let zmodem_event_name = format!("zmodem-event-{session_id}");
+    let zmodem_event_reader = zmodem_event_name.clone();
+    let (zmodem_out_tx, mut zmodem_out_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+
     let app_reader = app.clone();
     let sid_reader = session_id.clone();
     let output_reader = output.clone();
@@ -219,6 +226,7 @@ async fn telnet_session_task(
 
     let reader_handle = tokio::spawn(async move {
         let mut buf = [0u8; 4096];
+        let mut zmodem_detector = ZmodemDetector::new();
         loop {
             match reader.read(&mut buf).await {
                 Ok(0) => break,
@@ -230,16 +238,57 @@ async fn telnet_session_task(
                             let _ = neg_tx.send(resp);
                         }
                     });
-                    if !visible.is_empty() {
-                        let mut text = String::from_utf8_lossy(&visible).to_string();
-                        let mut proc = capture_for_reader.lock().await;
-                        if proc.has_active() {
-                            text = proc.process(&text);
+                    if visible.is_empty() {
+                        continue;
+                    }
+
+                    // ZMODEM: if active, route to transfer.
+                    {
+                        let mut zm = zmodem_state_reader.lock().await;
+                        if let Some(ref mut transfer) = *zm {
+                            let actions = transfer.feed_incoming(&visible);
+                            for action in actions {
+                                match action {
+                                    ZmodemAction::SendToRemote(data) => {
+                                        let _ = zmodem_out_tx.send(data);
+                                    }
+                                    ZmodemAction::EmitEvent(event) => {
+                                        let _ = app_reader.emit(&zmodem_event_reader, &event);
+                                    }
+                                }
+                            }
+                            if transfer.is_done() {
+                                *zm = None;
+                                zmodem_detector.reset();
+                            }
+                            continue;
                         }
-                        drop(proc);
-                        if !text.is_empty() {
-                            output_reader.push_owned(text);
+                    }
+
+                    // ZMODEM: detect header.
+                    if let Some((direction, header_offset)) = zmodem_detector.feed(&visible) {
+                        if header_offset > 0 {
+                            let pre =
+                                String::from_utf8_lossy(&visible[..header_offset]).to_string();
+                            if !pre.is_empty() {
+                                output_reader.push_owned(pre);
+                            }
                         }
+                        let transfer = ZmodemTransfer::new(direction, &visible[header_offset..]);
+                        *zmodem_state_reader.lock().await = Some(transfer);
+                        let _ = app_reader
+                            .emit(&zmodem_event_reader, &ZmodemEvent::Detected { direction });
+                        continue;
+                    }
+
+                    let mut text = String::from_utf8_lossy(&visible).to_string();
+                    let mut proc = capture_for_reader.lock().await;
+                    if proc.has_active() {
+                        text = proc.process(&text);
+                    }
+                    drop(proc);
+                    if !text.is_empty() {
+                        output_reader.push_owned(text);
                     }
                 }
                 Err(e) => {
@@ -288,12 +337,18 @@ async fn telnet_session_task(
                     break;
                 }
             }
+            Some(zdata) = zmodem_out_rx.recv() => {
+                let _ = writer.write_all(&zdata).await;
+            }
             cmd = cmd_rx.recv() => {
                 match cmd {
                     Some(SessionCommand::Attach) => {
                         output.attach();
                     }
                     Some(SessionCommand::Write(data)) => {
+                        if zmodem_state.lock().await.is_some() {
+                            continue;
+                        }
                         if let Err(e) = writer.write_all(&data).await {
                             log_rate_limited(StructuredLog {
                                 level: StructuredLogLevel::Warn,
@@ -326,6 +381,45 @@ async fn telnet_session_task(
                     Some(SessionCommand::Resize { cols, rows }) => {
                         let naws = build_naws(cols as u16, rows as u16);
                         let _ = writer.write_all(&naws).await;
+                    }
+                    Some(SessionCommand::ZmodemAcceptDownload { save_dir }) => {
+                        let mut zm = zmodem_state.lock().await;
+                        if let Some(ref mut transfer) = *zm {
+                            let actions = transfer.accept_download(save_dir);
+                            for action in actions {
+                                match action {
+                                    ZmodemAction::SendToRemote(data) => { let _ = writer.write_all(&data).await; }
+                                    ZmodemAction::EmitEvent(event) => { let _ = app.emit(&zmodem_event_name, &event); }
+                                }
+                            }
+                            if transfer.is_done() { *zm = None; }
+                        }
+                    }
+                    Some(SessionCommand::ZmodemAcceptUpload { files }) => {
+                        let mut zm = zmodem_state.lock().await;
+                        if let Some(ref mut transfer) = *zm {
+                            let actions = transfer.accept_upload(files);
+                            for action in actions {
+                                match action {
+                                    ZmodemAction::SendToRemote(data) => { let _ = writer.write_all(&data).await; }
+                                    ZmodemAction::EmitEvent(event) => { let _ = app.emit(&zmodem_event_name, &event); }
+                                }
+                            }
+                            if transfer.is_done() { *zm = None; }
+                        }
+                    }
+                    Some(SessionCommand::ZmodemCancel) => {
+                        let mut zm = zmodem_state.lock().await;
+                        if let Some(ref mut transfer) = *zm {
+                            let actions = transfer.cancel();
+                            for action in actions {
+                                match action {
+                                    ZmodemAction::SendToRemote(data) => { let _ = writer.write_all(&data).await; }
+                                    ZmodemAction::EmitEvent(event) => { let _ = app.emit(&zmodem_event_name, &event); }
+                                }
+                            }
+                        }
+                        *zm = None;
                     }
                     Some(SessionCommand::Close) | None => {
                         break;

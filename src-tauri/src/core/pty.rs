@@ -7,6 +7,7 @@ use super::session::{
     SessionCommand, SessionHandle, SessionInfo, SessionManager, SessionType, SharedCwd,
 };
 use super::update_cwd_if_changed;
+use super::zmodem::{ZmodemAction, ZmodemDetector, ZmodemEvent, ZmodemTransfer};
 use crate::core::capture::OutputCaptureProcessor;
 use crate::core::ssh::osc::{self, OscStripper, ShellKind};
 use crate::core::SessionOutputCoalescer;
@@ -197,6 +198,12 @@ fn pty_session_thread(
     let capture_processor = Arc::new(StdMutex::new(OutputCaptureProcessor::new()));
     let capture_for_reader = capture_processor.clone();
 
+    let zmodem_state: Arc<StdMutex<Option<ZmodemTransfer>>> = Arc::new(StdMutex::new(None));
+    let zmodem_state_reader = zmodem_state.clone();
+    let zmodem_event_name = format!("zmodem-event-{session_id}");
+    let zmodem_event_reader = zmodem_event_name.clone();
+    let (zmodem_out_tx, mut zmodem_out_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+
     let app_read = app.clone();
     let sid_read = session_id.clone();
     let cwd_event = format!("cwd-changed-{}", session_id);
@@ -212,11 +219,55 @@ fn pty_session_thread(
         let mut raw_buf = [0u8; 4096];
         let mut stripper = OscStripper::new(&ready_marker);
         let mut suppress_visible = suppress_injected_output;
+        let mut zmodem_detector = ZmodemDetector::new();
         loop {
             match reader.read(&mut raw_buf) {
                 Ok(0) => break,
                 Ok(n) => {
-                    let text = String::from_utf8_lossy(&raw_buf[..n]).to_string();
+                    let raw = &raw_buf[..n];
+
+                    // ZMODEM: if active, route raw bytes to the transfer.
+                    {
+                        let mut zm = zmodem_state_reader.lock().unwrap();
+                        if let Some(ref mut transfer) = *zm {
+                            let actions = transfer.feed_incoming(raw);
+                            for action in actions {
+                                match action {
+                                    ZmodemAction::SendToRemote(data) => {
+                                        let _ = zmodem_out_tx.send(data);
+                                    }
+                                    ZmodemAction::EmitEvent(event) => {
+                                        let _ = app_read.emit(&zmodem_event_reader, &event);
+                                    }
+                                }
+                            }
+                            if transfer.is_done() {
+                                *zm = None;
+                                zmodem_detector.reset();
+                            }
+                            continue;
+                        }
+                    }
+
+                    // ZMODEM: detect header in raw bytes.
+                    if !suppress_visible {
+                        if let Some((direction, header_offset)) = zmodem_detector.feed(raw) {
+                            if header_offset > 0 {
+                                let pre =
+                                    String::from_utf8_lossy(&raw[..header_offset]).to_string();
+                                if !pre.is_empty() {
+                                    output_reader.push_owned(pre);
+                                }
+                            }
+                            let transfer = ZmodemTransfer::new(direction, &raw[header_offset..]);
+                            *zmodem_state_reader.lock().unwrap() = Some(transfer);
+                            let _ = app_read
+                                .emit(&zmodem_event_reader, &ZmodemEvent::Detected { direction });
+                            continue;
+                        }
+                    }
+
+                    let text = String::from_utf8_lossy(raw).to_string();
                     let mut result = stripper.push(&text);
 
                     for path in &result.cwd_paths {
@@ -282,12 +333,24 @@ fn pty_session_thread(
             );
         }
     }
-    while let Some(cmd) = cmd_rx.blocking_recv() {
+    loop {
+        // Drain any ZMODEM outgoing data first (non-blocking).
+        while let Ok(data) = zmodem_out_rx.try_recv() {
+            let _ = write_to_pty(&mut *writer, &data);
+        }
+
+        let cmd = match cmd_rx.blocking_recv() {
+            Some(c) => c,
+            None => break,
+        };
         match cmd {
             SessionCommand::Attach => {
                 output.attach();
             }
             SessionCommand::Write(data) => {
+                if zmodem_state.lock().unwrap().is_some() {
+                    continue;
+                }
                 if let Some(ref rec) = recording_mgr {
                     rec.write_input(&session_id, &data);
                 }
@@ -322,6 +385,61 @@ fn pty_session_thread(
                     pixel_width: 0,
                     pixel_height: 0,
                 });
+            }
+            SessionCommand::ZmodemAcceptDownload { save_dir } => {
+                let mut zm = zmodem_state.lock().unwrap();
+                if let Some(ref mut transfer) = *zm {
+                    let actions = transfer.accept_download(save_dir);
+                    for action in actions {
+                        match action {
+                            ZmodemAction::SendToRemote(data) => {
+                                let _ = write_to_pty(&mut *writer, &data);
+                            }
+                            ZmodemAction::EmitEvent(event) => {
+                                let _ = app.emit(&zmodem_event_name, &event);
+                            }
+                        }
+                    }
+                    if transfer.is_done() {
+                        *zm = None;
+                    }
+                }
+            }
+            SessionCommand::ZmodemAcceptUpload { files } => {
+                let mut zm = zmodem_state.lock().unwrap();
+                if let Some(ref mut transfer) = *zm {
+                    let actions = transfer.accept_upload(files);
+                    for action in actions {
+                        match action {
+                            ZmodemAction::SendToRemote(data) => {
+                                let _ = write_to_pty(&mut *writer, &data);
+                            }
+                            ZmodemAction::EmitEvent(event) => {
+                                let _ = app.emit(&zmodem_event_name, &event);
+                            }
+                        }
+                    }
+                    if transfer.is_done() {
+                        *zm = None;
+                    }
+                }
+            }
+            SessionCommand::ZmodemCancel => {
+                let mut zm = zmodem_state.lock().unwrap();
+                if let Some(ref mut transfer) = *zm {
+                    let actions = transfer.cancel();
+                    for action in actions {
+                        match action {
+                            ZmodemAction::SendToRemote(data) => {
+                                let _ = write_to_pty(&mut *writer, &data);
+                            }
+                            ZmodemAction::EmitEvent(event) => {
+                                let _ = app.emit(&zmodem_event_name, &event);
+                            }
+                        }
+                    }
+                }
+                *zm = None;
             }
             SessionCommand::Close => {
                 break;

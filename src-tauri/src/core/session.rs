@@ -96,6 +96,12 @@ pub enum SessionCommand {
         wrapped_command: Vec<u8>,
         result_tx: oneshot::Sender<CapturedOutput>,
     },
+    /// ZMODEM: user accepted a download — save to this directory.
+    ZmodemAcceptDownload { save_dir: std::path::PathBuf },
+    /// ZMODEM: user accepted an upload — send these files.
+    ZmodemAcceptUpload { files: Vec<std::path::PathBuf> },
+    /// ZMODEM: user cancelled the ZMODEM transfer.
+    ZmodemCancel,
 }
 
 /// Handle to an active session; used to send commands and access SSH config for SFTP.

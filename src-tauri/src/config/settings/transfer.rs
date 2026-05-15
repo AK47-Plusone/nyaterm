@@ -27,6 +27,8 @@ pub struct TransferSettings {
     pub default_editor: String,
     #[serde(default)]
     pub recording_path: String,
+    #[serde(default = "default_true")]
+    pub zmodem_enabled: bool,
 }
 
 fn default_transfer_threads() -> u32 {
@@ -60,6 +62,7 @@ impl Default for TransferSettings {
             ask_save_location: false,
             default_editor: String::new(),
             recording_path: String::new(),
+            zmodem_enabled: true,
         }
     }
 }

@@ -22,6 +22,7 @@ pub mod stats;
 pub mod telnet;
 pub mod translate;
 pub mod watcher;
+pub mod zmodem;
 
 pub use cloud_sync::CloudSyncManager;
 pub(crate) use output::SessionOutputCoalescer;
