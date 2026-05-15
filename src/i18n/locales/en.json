@@ -1339,5 +1339,14 @@
     "retry": "Retry",
     "updateFailed": "Update failed",
     "updateNow": "Update Now"
+  },
+  "zmodem": {
+    "cancelled": "ZMODEM transfer cancelled",
+    "complete": "ZMODEM transfer complete ({{count}} file(s))",
+    "downloading": "Receiving: {{fileName}} ({{percent}}%)",
+    "failed": "ZMODEM transfer failed: {{reason}}",
+    "selectFiles": "Select files to upload via ZMODEM",
+    "selectSaveDir": "Select folder to save ZMODEM downloads",
+    "uploading": "Sending: {{fileName}} ({{percent}}%)"
   }
 }
