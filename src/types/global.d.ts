@@ -553,13 +553,11 @@ export interface AISettings {
   enabled: boolean;
   context_line_limit: number;
   redaction_enabled: boolean;
-  risk_check_enabled: boolean;
   allow_save_command: boolean;
   record_history: boolean;
   timeout_ms: number;
   active_profile_id: string;
   provider_profiles: AIProviderProfile[];
-  allowed_command_risk_level: RiskLevel;
   default_mode: AIMode;
   default_model_id?: string | null;
   models: AIModelConfigItem[];
@@ -606,8 +604,8 @@ export interface AICommandCard {
   title: string;
   command: string;
   explanation: string;
-  riskLevel: RiskLevel;
-  riskReason: string;
+  riskLevel?: RiskLevel | null;
+  riskReason?: string | null;
   expectedEffect: string;
   rollback?: string | null;
   category?: string | null;
@@ -674,14 +672,6 @@ export interface AgentStepPayload {
   observation?: CommandObservation | null;
   status: AgentStepStatus;
   error?: string | null;
-}
-
-export interface CommandRiskResponse {
-  riskLevel: RiskLevel;
-  blocked: boolean;
-  reason: string;
-  safeAlternatives: string[];
-  confirmText?: string | null;
 }
 
 export interface TunnelConfig {

@@ -79,7 +79,6 @@ import { AI_ERROR_DETECTED_EVENT } from "@/lib/aiEvents";
 import {
   getEnabledAIModels,
   getModelProviderLabel,
-  isRiskAllowed,
   selectDefaultAIModel,
 } from "@/lib/aiSettings";
 import { getErrorMessage } from "@/lib/errors";
@@ -102,7 +101,6 @@ import type {
   QuickCommand,
   QuickCommandCategory,
   QuickCommandsConfig,
-  RiskLevel,
   SavedConnection,
   SessionPane,
 } from "@/types/global";
@@ -115,7 +113,6 @@ interface AIAssistantPanelProps {
 
 type AICommandExecutionStatus =
   | "idle"
-  | "auto_executing"
   | "executed"
   | "pending_approval"
   | "rejected"
@@ -125,13 +122,6 @@ interface AICommandExecutionState {
   status: AICommandExecutionStatus;
   error?: string;
 }
-
-const riskClassName: Record<RiskLevel, string> = {
-  low: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600",
-  medium: "border-amber-500/30 bg-amber-500/10 text-amber-600",
-  high: "border-orange-500/30 bg-orange-500/10 text-orange-600",
-  critical: "border-red-500/30 bg-red-500/10 text-red-600",
-};
 
 function actionTitle(action: AIAction) {
   switch (action) {
@@ -173,19 +163,6 @@ function slugCategory(name: string) {
       .replace(/^-+|-+$/g, "")
       .slice(0, 48) || "commands"
   }`;
-}
-
-function mapRiskColor(riskLevel: RiskLevel) {
-  switch (riskLevel) {
-    case "critical":
-      return "red";
-    case "high":
-      return "yellow";
-    case "medium":
-      return "blue";
-    case "low":
-      return "green";
-  }
 }
 
 type MarkdownNodeProps = {
@@ -569,11 +546,6 @@ function AICommandCardView({
       <div className="flex min-w-0 items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="truncate text-sm font-medium">{card.title}</div>
-          <div
-            className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[0.6875rem] font-medium ${riskClassName[card.riskLevel]}`}
-          >
-            {card.riskLevel}
-          </div>
         </div>
       </div>
       <pre className="mt-3 max-h-32 overflow-auto rounded-md border border-border/60 bg-muted/30 p-2 font-mono text-[0.6875rem] leading-5 terminal-scroll whitespace-pre-wrap break-all">
@@ -581,47 +553,36 @@ function AICommandCardView({
       </pre>
       <div className="mt-3 space-y-1 leading-5 text-muted-foreground">
         <p>{card.explanation}</p>
-        <p>{card.riskReason}</p>
         <p>{card.expectedEffect}</p>
         {card.rollback ? <p>{card.rollback}</p> : null}
       </div>
       {status !== "idle" ? (
         <div className="mt-3 rounded-md border border-border/70 bg-muted/20 p-3">
           <div className="flex items-center gap-2 text-xs font-medium">
-            {status === "auto_executing" ? <MdPlayArrow /> : null}
             {status === "executed" ? <MdCheck /> : null}
             {status === "pending_approval" ? <MdErrorOutline /> : null}
             {status === "rejected" ? <MdBlock /> : null}
             {status === "failed" ? <MdErrorOutline /> : null}
             <span>
-              {status === "auto_executing"
-                ? t("ai.commandAutoExecuting")
-                : status === "executed"
-                  ? t("ai.commandExecuted")
-                  : status === "pending_approval"
-                    ? t("ai.commandPendingApproval")
-                    : status === "rejected"
-                      ? t("ai.commandRejected")
-                      : t("ai.commandExecutionFailed")}
+              {status === "executed"
+                ? t("ai.commandExecuted")
+                : status === "pending_approval"
+                  ? t("ai.commandPendingApproval")
+                  : status === "rejected"
+                    ? t("ai.commandRejected")
+                    : t("ai.commandExecutionFailed")}
             </span>
           </div>
           {status === "pending_approval" ? (
-            <div className="mt-2 space-y-2 text-[0.6875rem] leading-5 text-muted-foreground">
-              <p>
-                {t("ai.authorizeCommandDesc", {
-                  risk: card.riskLevel,
-                })}
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                <Button size="xs" variant="outline" onClick={() => onReject(card)}>
-                  <MdBlock />
-                  {t("ai.rejectExecute")}
-                </Button>
-                <Button size="xs" onClick={() => onAuthorize(card)}>
-                  <MdPlayArrow />
-                  {t("ai.authorizeExecute")}
-                </Button>
-              </div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <Button size="xs" variant="outline" onClick={() => onReject(card)}>
+                <MdBlock />
+                {t("ai.rejectExecute")}
+              </Button>
+              <Button size="xs" onClick={() => onAuthorize(card)}>
+                <MdPlayArrow />
+                {t("ai.authorizeExecute")}
+              </Button>
             </div>
           ) : null}
           {execution?.error ? (
@@ -711,13 +672,6 @@ function AgentStepView({
           {/* Shell header */}
           <div className="flex items-center gap-1.5 border-b border-border/40 px-2.5 py-1 text-[0.625rem] text-muted-foreground">
             <span className="font-medium uppercase tracking-wider">shell</span>
-            {step.action.riskLevel ? (
-              <span
-                className={`ml-auto rounded-full border px-1.5 py-0.5 font-medium ${riskClassName[step.action.riskLevel]}`}
-              >
-                {step.action.riskLevel}
-              </span>
-            ) : null}
           </div>
 
           {/* Command body */}
@@ -770,6 +724,39 @@ function AgentStepView({
           {isRunning ? (
             <div className="border-t border-border/40 px-2.5 py-1.5">
               <AnimatedStatusText label={t("ai.agentExecuting")} />
+            </div>
+          ) : null}
+
+          {/* Approval buttons */}
+          {step.status === "needs_approval" ? (
+            <div className="flex items-center gap-1.5 border-t border-border/40 px-2.5 py-1.5">
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={() =>
+                  void invoke("respond_agent_step", {
+                    streamId: step.streamId,
+                    stepIndex: step.stepIndex,
+                    approved: false,
+                  })
+                }
+              >
+                <MdBlock />
+                {t("ai.rejectExecute")}
+              </Button>
+              <Button
+                size="xs"
+                onClick={() =>
+                  void invoke("respond_agent_step", {
+                    streamId: step.streamId,
+                    stepIndex: step.stepIndex,
+                    approved: true,
+                  })
+                }
+              >
+                <MdPlayArrow />
+                {t("ai.authorizeExecute")}
+              </Button>
             </div>
           ) : null}
         </div>
@@ -1017,7 +1004,6 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
       action: string;
       userInput?: string;
       generatedCommand?: string;
-      riskLevel?: RiskLevel;
       insertedToTerminal?: boolean;
       executed?: boolean;
       blocked?: boolean;
@@ -1028,7 +1014,7 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
           action: params.action,
           userInput: params.userInput,
           generatedCommand: params.generatedCommand,
-          riskLevel: params.riskLevel,
+          riskLevel: null,
           insertedToTerminal: params.insertedToTerminal ?? false,
           executed: params.executed ?? false,
           blocked: params.blocked ?? false,
@@ -1123,7 +1109,6 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
         return;
       }
 
-      setCommandState(card.id, "auto_executing");
       try {
         await provider.executeCommand(card.command);
         provider.focus();
@@ -1131,7 +1116,6 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
         appendAudit({
           action: source === "auto" ? "ai.agent_auto_execute" : "ai.agent_authorized_execute",
           generatedCommand: card.command,
-          riskLevel: card.riskLevel,
           executed: true,
         });
       } catch (error) {
@@ -1140,26 +1124,11 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
         appendAudit({
           action: "ai.agent_execute_failed",
           generatedCommand: card.command,
-          riskLevel: card.riskLevel,
         });
         toast.error(message);
       }
     },
     [activeSessionId, appendAudit, effectiveSessionId, setCommandState, t],
-  );
-
-  const handleAgentCommandCards = useCallback(
-    (cards: AICommandCard[], requestMode: AIMode, allowedRisk: RiskLevel) => {
-      if (requestMode !== "agent") return;
-      for (const card of cards) {
-        if (isRiskAllowed(card.riskLevel, allowedRisk)) {
-          void executeCommandCard(card, "auto");
-        } else {
-          setCommandState(card.id, "pending_approval");
-        }
-      }
-    },
-    [executeCommandCard, setCommandState],
   );
 
   const startChat = useCallback(
@@ -1179,7 +1148,6 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
         return;
       }
       const requestMode = mode;
-      const allowedRisk = aiSettings.allowed_command_risk_level ?? "medium";
 
       setDetectedError(null);
       setLoading(true);
@@ -1277,13 +1245,6 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
                   return { ...rest, [newMsgId]: steps };
                 });
               }
-              if (requestMode !== "agent") {
-                handleAgentCommandCards(
-                  payload.message?.commandCards ?? payload.commandCards ?? [],
-                  requestMode,
-                  allowedRisk,
-                );
-              }
               void loadSessions();
               return;
             }
@@ -1334,7 +1295,6 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
               maxOutputCommands: 2,
               language: "zh-CN",
               safetyMode: "strict",
-              allowedCommandRiskLevel: allowedRisk,
             },
           },
         });
@@ -1360,14 +1320,12 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
     },
     [
       activeConnection,
-      aiSettings.allowed_command_risk_level,
       aiSettings.enabled,
       appendAudit,
       buildMergedContext,
       cleanupStreamListener,
       currentSessionId,
       effectivePanes,
-      handleAgentCommandCards,
       loadSessions,
       mode,
       savedConnections,
@@ -1418,7 +1376,6 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
           appendAudit({
             action: "ai.insert_command",
             generatedCommand: card.command,
-            riskLevel: card.riskLevel,
             insertedToTerminal: true,
           });
         })
@@ -1447,20 +1404,18 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
           label: card.title,
           command: card.command,
           category_id: categoryId,
-          description: `${card.explanation}\n${card.riskReason}`,
-          color_tag: mapRiskColor(card.riskLevel),
+          description: card.explanation,
+          color_tag: "blue",
           icon_tag: "terminal",
           pinned: false,
           execution_mode: "append",
           source: "ai",
-          risk_level: card.riskLevel,
         };
         await invoke("upsert_quick_command", { command, newCategory });
         await emit("quick-command-saved", { command, newCategory });
         appendAudit({
           action: "ai.save_quick_command",
           generatedCommand: card.command,
-          riskLevel: card.riskLevel,
         });
         toast.success(t("ai.savedQuickCommand"));
       } catch (error) {
@@ -1483,7 +1438,6 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
       appendAudit({
         action: "ai.agent_reject_execute",
         generatedCommand: card.command,
-        riskLevel: card.riskLevel,
         blocked: true,
       });
     },

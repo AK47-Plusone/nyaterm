@@ -4,7 +4,6 @@ import { MdAdd, MdDelete, MdExpandLess, MdExpandMore, MdRefresh } from "react-ic
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SelectItem } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useApp } from "@/context/AppContext";
 import {
@@ -14,7 +13,6 @@ import {
   getProviderLabel,
   isBuiltinProvider,
   mergeModelDiscoveries,
-  RISK_LEVELS,
 } from "@/lib/aiSettings";
 import { getErrorMessage } from "@/lib/errors";
 import { invoke } from "@/lib/invoke";
@@ -83,12 +81,6 @@ export function AiGeneralTab() {
             onChange={(redaction_enabled) => update({ redaction_enabled })}
           />
         </SettingRow>
-        <SettingRow label={t("ai.riskCheck")}>
-          <SettingSwitch
-            checked={ai.risk_check_enabled}
-            onChange={(risk_check_enabled) => update({ risk_check_enabled })}
-          />
-        </SettingRow>
         <SettingRow label={t("ai.allowSave")}>
           <SettingSwitch
             checked={ai.allow_save_command}
@@ -101,22 +93,6 @@ export function AiGeneralTab() {
             onChange={(record_history) => update({ record_history })}
           />
         </SettingRow>
-        <SettingSelect
-          label={t("ai.allowedCommandRiskLevel")}
-          value={ai.allowed_command_risk_level}
-          onValueChange={(allowed_command_risk_level) =>
-            update({
-              allowed_command_risk_level:
-                allowed_command_risk_level as AISettings["allowed_command_risk_level"],
-            })
-          }
-        >
-          {RISK_LEVELS.map((risk) => (
-            <SelectItem key={risk.value} value={risk.value}>
-              {t(risk.labelKey)}
-            </SelectItem>
-          ))}
-        </SettingSelect>
         <SettingFieldGrid>
           <SettingNumberInput
             label={t("ai.contextLineLimit")}
