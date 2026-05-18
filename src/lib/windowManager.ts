@@ -15,9 +15,10 @@ interface ChildWindowOptions {
 
 const MAIN_WINDOW_LABEL = "main";
 const AUTO_UPLOAD_WINDOW_PREFIX = "auto-upload-";
+const MODAL_CHILD_LABELS = new Set(["settings", "new-session", "quick-command"]);
 
 export function isModalChildLabel(label: string) {
-  return label.startsWith(AUTO_UPLOAD_WINDOW_PREFIX);
+  return MODAL_CHILD_LABELS.has(label) || label.startsWith(AUTO_UPLOAD_WINDOW_PREFIX);
 }
 
 async function getMainWindow() {
