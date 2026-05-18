@@ -53,7 +53,7 @@ pub use settings::{
     ai_model_id_for_credential, ai_model_id_for_provider, decrypt_ai_settings, encrypt_ai_settings,
     load_app_settings, mask_ai_settings, merge_masked_ai_settings, normalize_ai_settings,
     save_app_settings, ActionLinksMatcherSettings, AiCustomActionConfig, AiMode, AiModelConfigItem,
-    AiModelSource, AiProviderCredential, AiProviderKind, AiProviderProfile, AiRiskLevel,
+    AiModelSource, AiProviderCredential, AiProviderKind, AiProviderProfile,
     AiSettings, AppSettings, AppearanceSettings, DiagnosticsLogLevel, DiagnosticsSettings,
     GeneralSettings, InteractionSettings, KeywordHighlightRule, ProxySettings, SearchEngine,
     SearchSettings, SecuritySettings, TerminalSettings, TransferSettings, TranslationSettings,

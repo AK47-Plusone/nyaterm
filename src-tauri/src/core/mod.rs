@@ -6,7 +6,6 @@
 pub mod ai;
 pub mod backup;
 pub mod capture;
-pub mod cloud_crypto;
 pub mod cloud_sync;
 pub mod history;
 pub mod importer;

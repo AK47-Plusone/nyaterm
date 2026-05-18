@@ -14,7 +14,7 @@ pub use ai::{
     ai_model_id_for_credential, ai_model_id_for_provider, decrypt_ai_settings, encrypt_ai_settings,
     mask_ai_settings, merge_masked_ai_settings, normalize_ai_settings, AiCustomActionConfig,
     AiMode, AiModelConfigItem, AiModelSource, AiProviderCredential, AiProviderKind,
-    AiProviderProfile, AiRiskLevel, AiSettings,
+    AiProviderProfile, AiSettings,
 };
 pub use appearance::AppearanceSettings;
 pub use diagnostics::{DiagnosticsLogLevel, DiagnosticsSettings};

@@ -4,7 +4,7 @@ use crate::config;
 use crate::error::{AppError, AppResult};
 use crate::utils::crypto::get_master_password;
 
-use super::cloud_crypto::{decrypt_snapshot_bytes, encrypt_snapshot_bytes};
+use super::cloud_sync::crypto::{decrypt_snapshot_bytes, encrypt_snapshot_bytes};
 use super::portable_snapshot::{
     apply_portable_snapshot, build_portable_snapshot, decode_portable_snapshot,
     encode_portable_snapshot, PortableSnapshotKind,
