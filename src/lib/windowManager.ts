@@ -1,6 +1,10 @@
 import { emit } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
+import {
+  getCurrentWindow,
+  type Window as TauriWindow,
+  UserAttentionType,
+} from "@tauri-apps/api/window";
 import i18n from "../i18n";
 import { isMacOS } from "./platform";
 
@@ -36,6 +40,18 @@ async function getOpenModalChildWindows() {
   );
 }
 
+async function setMainWindowModalBlocking(mainWindow: TauriWindow, hasModalChild: boolean) {
+  if (isMacOS) {
+    // AppKit child windows inherit disabled/dimmed behavior from their parent window.
+    await mainWindow.setEnabled(true).catch(() => {});
+    await mainWindow.setFocusable(true).catch(() => {});
+    return;
+  }
+
+  await mainWindow.setEnabled(!hasModalChild).catch(() => {});
+  await mainWindow.setFocusable(!hasModalChild).catch(() => {});
+}
+
 async function applyModalWindowState(excludedLabel?: string) {
   const [mainWindow, modalWindows] = await Promise.all([
     getMainWindow(),
@@ -46,8 +62,7 @@ async function applyModalWindowState(excludedLabel?: string) {
     : modalWindows;
   const hasModalChild = remainingModalWindows.length > 0;
 
-  await mainWindow.setEnabled(!hasModalChild).catch(() => {});
-  await mainWindow.setFocusable(!hasModalChild).catch(() => {});
+  await setMainWindowModalBlocking(mainWindow, hasModalChild);
 
   if (hasModalChild) {
     const topModalWindow = remainingModalWindows[remainingModalWindows.length - 1];

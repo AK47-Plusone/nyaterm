@@ -19,6 +19,7 @@ import TabWindowsWorkspace from "@/components/terminal/TabWindowsWorkspace";
 import { Toaster } from "@/components/ui/sonner";
 import { isMacOS } from "@/lib/platform";
 import type { UpdateInfo } from "@/lib/updater";
+import { bounceTopModalWindow } from "@/lib/windowManager";
 import type { UiConfig } from "@/types/global";
 
 type HeaderProps = ComponentProps<typeof Header>;
@@ -311,6 +312,9 @@ export default function AppLayout({
       {dialogs.modalChildWindowCount > 0 && (
         <div
           className="fixed inset-0 z-[9998]"
+          onMouseDown={() => {
+            void bounceTopModalWindow();
+          }}
           style={{
             backgroundColor: "rgba(0, 0, 0, 0.3)",
             backdropFilter: "blur(4px)",
