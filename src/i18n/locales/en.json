@@ -214,6 +214,13 @@
   },
   "dialog": {
     "advancedConfig": "Advanced Configuration",
+    "aiExecutionProfile": "AI Execution Profile",
+    "aiExecutionProfileAuto": "Auto",
+    "aiExecutionProfileCmd": "CMD",
+    "aiExecutionProfileDisabled": "Disabled",
+    "aiExecutionProfilePosix": "POSIX",
+    "aiExecutionProfilePowerShell": "PowerShell",
+    "aiExecutionProfileSendOnly": "Send only",
     "authentication": "Authentication",
     "autoFillOtp": "Auto-fill verification code",
     "baudRate": "Baud Rate",
