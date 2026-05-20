@@ -37,14 +37,14 @@ pub enum ConnectionType {
         shell_path: String,
         #[serde(default)]
         working_dir: Option<String>,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "is_ai_execution_profile_auto")]
         ai_execution_profile: AiExecutionProfile,
     },
     Telnet {
         host: String,
         #[serde(default = "default_telnet_port")]
         port: u16,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "is_ai_execution_profile_auto")]
         ai_execution_profile: AiExecutionProfile,
         #[serde(default = "default_backspace_mode_telnet")]
         backspace_mode: String,
@@ -59,7 +59,7 @@ pub enum ConnectionType {
         parity: String,
         #[serde(default = "default_stop_bits")]
         stop_bits: String,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "is_ai_execution_profile_auto")]
         ai_execution_profile: AiExecutionProfile,
         #[serde(default = "default_backspace_mode_serial")]
         backspace_mode: String,
@@ -92,6 +92,9 @@ fn default_backspace_mode_serial() -> String {
 }
 fn default_backspace_mode_telnet() -> String {
     "del".to_string()
+}
+fn is_ai_execution_profile_auto(value: &AiExecutionProfile) -> bool {
+    *value == AiExecutionProfile::Auto
 }
 
 // ── Auth block ──────────────────────────────────────────────────────────────
@@ -231,6 +234,23 @@ pub fn save_sessions(app: &AppHandle, config: &SessionsConfig) -> AppResult<()> 
     let _ = app;
     let mut sanitized = config.clone();
     for conn in &mut sanitized.connections {
+        match &mut conn.config {
+            ConnectionType::LocalTerminal {
+                ai_execution_profile,
+                ..
+            }
+            | ConnectionType::Telnet {
+                ai_execution_profile,
+                ..
+            }
+            | ConnectionType::Serial {
+                ai_execution_profile,
+                ..
+            } => {
+                *ai_execution_profile = AiExecutionProfile::Auto;
+            }
+            ConnectionType::Ssh { .. } => {}
+        }
         if let Some(auth) = &mut conn.auth {
             auth.has_password = false;
         }

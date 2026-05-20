@@ -22,13 +22,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { invoke } from "@/lib/invoke";
-import type {
-  AIExecutionProfile,
-  Group,
-  OtpEntry,
-  ProxyConfig,
-  SavedConnection,
-} from "@/types/global";
+import type { Group, OtpEntry, ProxyConfig, SavedConnection } from "@/types/global";
 
 const isValidPort = (value: number) => Number.isInteger(value) && value >= 1 && value <= 65535;
 
@@ -91,12 +85,6 @@ export default function NewSessionPage() {
   // Local Terminal States
   const [shellPath, setShellPath] = useState("powershell.exe");
   const [workingDir, setWorkingDir] = useState("");
-  const [localAiExecutionProfile, setLocalAiExecutionProfile] =
-    useState<AIExecutionProfile>("auto");
-  const [telnetAiExecutionProfile, setTelnetAiExecutionProfile] =
-    useState<AIExecutionProfile>("auto");
-  const [serialAiExecutionProfile, setSerialAiExecutionProfile] =
-    useState<AIExecutionProfile>("auto");
   const [serialBackspaceMode, setSerialBackspaceMode] = useState("ctrl_h");
   const [telnetBackspaceMode, setTelnetBackspaceMode] = useState("del");
 
@@ -151,19 +139,16 @@ export default function NewSessionPage() {
         } else if (found.type === "telnet") {
           setHost(found.host || "");
           setTelnetPort(found.port || 23);
-          setTelnetAiExecutionProfile(found.ai_execution_profile || "auto");
           setTelnetBackspaceMode(found.backspace_mode || "del");
         } else if (found.type === "local_terminal") {
           setShellPath(found.shell_path || "powershell.exe");
           setWorkingDir(found.working_dir || "");
-          setLocalAiExecutionProfile(found.ai_execution_profile || "auto");
         } else if (found.type === "serial") {
           setSerialPortName(found.port_name || "");
           setBaudRate(String(found.baud_rate || 115200));
           setDataBits(String(found.data_bits || 8));
           setParity(found.parity || "none");
           setStopBits(found.stop_bits || "1");
-          setSerialAiExecutionProfile(found.ai_execution_profile || "auto");
           setSerialBackspaceMode(found.backspace_mode || "ctrl_h");
         }
       })
@@ -221,9 +206,6 @@ export default function NewSessionPage() {
     setStopBits("1");
     setShellPath("powershell.exe");
     setWorkingDir("");
-    setLocalAiExecutionProfile("auto");
-    setTelnetAiExecutionProfile("auto");
-    setSerialAiExecutionProfile("auto");
     setSerialBackspaceMode("ctrl_h");
     setTelnetBackspaceMode("del");
     setShowIconPicker(false);
@@ -395,14 +377,6 @@ export default function NewSessionPage() {
             : currentTab === "telnet"
               ? "telnet"
               : "serial";
-      const aiExecutionProfile =
-        currentTab === "local"
-          ? localAiExecutionProfile
-          : currentTab === "telnet"
-            ? telnetAiExecutionProfile
-            : currentTab === "serial"
-              ? serialAiExecutionProfile
-              : undefined;
       const network =
         currentTab === "ssh"
           ? (() => {
@@ -459,7 +433,6 @@ export default function NewSessionPage() {
           ? {
               host: normalizedHost,
               port: telnetPort,
-              ai_execution_profile: aiExecutionProfile,
               backspace_mode: telnetBackspaceMode,
             }
           : {}),
@@ -467,7 +440,6 @@ export default function NewSessionPage() {
           ? {
               shell_path: normalizedShellPath,
               working_dir: normalizedWorkingDir || undefined,
-              ai_execution_profile: aiExecutionProfile,
             }
           : {}),
         ...(currentTab === "serial"
@@ -477,7 +449,6 @@ export default function NewSessionPage() {
               data_bits: Number(dataBits),
               parity,
               stop_bits: stopBits,
-              ai_execution_profile: aiExecutionProfile,
               backspace_mode: serialBackspaceMode,
             }
           : {}),
@@ -779,8 +750,6 @@ export default function NewSessionPage() {
               setShellPath={setShellPath}
               workingDir={workingDir}
               setWorkingDir={setWorkingDir}
-              aiExecutionProfile={localAiExecutionProfile}
-              setAiExecutionProfile={setLocalAiExecutionProfile}
             />
           </TabsContent>
 
@@ -790,8 +759,6 @@ export default function NewSessionPage() {
               setHost={setHost}
               port={telnetPort}
               setPort={setTelnetPort}
-              aiExecutionProfile={telnetAiExecutionProfile}
-              setAiExecutionProfile={setTelnetAiExecutionProfile}
               backspaceMode={telnetBackspaceMode}
               setBackspaceMode={setTelnetBackspaceMode}
             />
@@ -815,8 +782,6 @@ export default function NewSessionPage() {
               setParity={setParity}
               stopBits={stopBits}
               setStopBits={setStopBits}
-              aiExecutionProfile={serialAiExecutionProfile}
-              setAiExecutionProfile={setSerialAiExecutionProfile}
               backspaceMode={serialBackspaceMode}
               setBackspaceMode={setSerialBackspaceMode}
             />

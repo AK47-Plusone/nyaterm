@@ -23,7 +23,6 @@ pub struct SerialConfig {
     pub parity: String,
     pub stop_bits: String,
     pub name: String,
-    pub ai_execution_profile: AiExecutionProfile,
     pub backspace_mode: String,
 }
 
@@ -101,7 +100,7 @@ pub async fn create_serial_session(
         name: config.name.clone(),
         session_type: SessionType::Serial,
         connected: true,
-        ai_execution_profile: config.ai_execution_profile,
+        ai_execution_profile: AiExecutionProfile::SendOnly,
         injection_active: false,
     };
 

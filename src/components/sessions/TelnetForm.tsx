@@ -9,16 +9,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { AIExecutionProfile } from "@/types/global";
-import { AiExecutionProfileField } from "./AiExecutionProfileField";
 
 interface TelnetFormProps {
   host: string;
   setHost: (v: string) => void;
   port: number;
   setPort: (v: number) => void;
-  aiExecutionProfile: AIExecutionProfile;
-  setAiExecutionProfile: (v: AIExecutionProfile) => void;
   backspaceMode: string;
   setBackspaceMode: (v: string) => void;
 }
@@ -32,8 +28,6 @@ export function TelnetForm({
   setHost,
   port,
   setPort,
-  aiExecutionProfile,
-  setAiExecutionProfile,
   backspaceMode,
   setBackspaceMode,
 }: TelnetFormProps) {
@@ -82,7 +76,6 @@ export function TelnetForm({
             </SelectContent>
           </Select>
         </div>
-        <AiExecutionProfileField value={aiExecutionProfile} onChange={setAiExecutionProfile} />
       </div>
     </div>
   );

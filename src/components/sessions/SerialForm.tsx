@@ -7,8 +7,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { AIExecutionProfile } from "@/types/global";
-import { AiExecutionProfileField } from "./AiExecutionProfileField";
 
 interface SerialPortOption {
   unavailable?: boolean;
@@ -30,8 +28,6 @@ interface SerialFormProps {
   setParity: (v: string) => void;
   stopBits: string;
   setStopBits: (v: string) => void;
-  aiExecutionProfile: AIExecutionProfile;
-  setAiExecutionProfile: (v: AIExecutionProfile) => void;
   backspaceMode: string;
   setBackspaceMode: (v: string) => void;
 }
@@ -55,8 +51,6 @@ export function SerialForm({
   setParity,
   stopBits,
   setStopBits,
-  aiExecutionProfile,
-  setAiExecutionProfile,
   backspaceMode,
   setBackspaceMode,
 }: SerialFormProps) {
@@ -198,7 +192,6 @@ export function SerialForm({
             </SelectContent>
           </Select>
         </div>
-        <AiExecutionProfileField value={aiExecutionProfile} onChange={setAiExecutionProfile} />
       </div>
     </div>
   );

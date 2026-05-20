@@ -24,7 +24,6 @@ pub struct LocalSessionConfig {
     pub shell_path: String,
     pub working_dir: Option<String>,
     pub name: String,
-    pub ai_execution_profile: AiExecutionProfile,
 }
 
 fn build_shell_command(shell_cmd: &str) -> (CommandBuilder, String) {
@@ -55,14 +54,7 @@ fn platform_default_shell() -> (CommandBuilder, String) {
     }
 }
 
-fn infer_local_ai_execution_profile(
-    shell_name: &str,
-    configured: AiExecutionProfile,
-) -> AiExecutionProfile {
-    if configured != AiExecutionProfile::Auto {
-        return configured;
-    }
-
+fn infer_local_ai_execution_profile(shell_name: &str) -> AiExecutionProfile {
     let shell = shell_name.to_ascii_lowercase();
     if shell.contains("powershell") || shell.contains("pwsh") {
         AiExecutionProfile::Powershell
@@ -78,7 +70,7 @@ fn infer_local_ai_execution_profile(
     {
         AiExecutionProfile::Posix
     } else {
-        AiExecutionProfile::Auto
+        AiExecutionProfile::SendOnly
     }
 }
 
@@ -106,10 +98,7 @@ pub async fn create_local_session(
         Some(cfg) if !cfg.shell_path.trim().is_empty() => build_shell_command(&cfg.shell_path),
         _ => platform_default_shell(),
     };
-    let configured_ai_profile = config
-        .as_ref()
-        .map_or(AiExecutionProfile::Auto, |cfg| cfg.ai_execution_profile);
-    let ai_execution_profile = infer_local_ai_execution_profile(&shell_name, configured_ai_profile);
+    let ai_execution_profile = infer_local_ai_execution_profile(&shell_name);
     let ready_marker = osc::build_ready_marker(&session_id);
     let injection_script = osc::injection_script(ShellKind::from_name(&shell_name), &ready_marker);
     let injection_active = injection_script.is_some();

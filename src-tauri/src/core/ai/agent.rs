@@ -140,7 +140,10 @@ async fn execute_command_on_session(
         "Resolved AI agent execution profile"
     );
 
-    if profile == AiExecutionProfile::SendOnly {
+    if matches!(
+        profile,
+        AiExecutionProfile::Auto | AiExecutionProfile::SendOnly
+    ) {
         return send_command_without_capture(
             app,
             session_manager,
@@ -150,13 +153,6 @@ async fn execute_command_on_session(
             terminal_output_lines,
         )
         .await;
-    }
-
-    if profile == AiExecutionProfile::Auto {
-        return Err(AppError::Config(
-            "当前会话未配置 AI 执行 Profile，无法判断命令包装方式。请在连接设置中选择 POSIX、PowerShell、CMD、Send only 或禁用 Agent 执行。"
-                .to_string(),
-        ));
     }
 
     if profile == AiExecutionProfile::Disabled {
@@ -281,7 +277,7 @@ async fn send_command_without_capture(
         .await?;
 
     let observation = CommandObservation {
-        output: "命令已发送到终端，但当前 AI 执行 Profile 为 send_only，未捕获输出。".to_string(),
+        output: "命令已发送到终端，但当前会话使用仅发送模式，未捕获输出。".to_string(),
         exit_code: None,
         duration_ms: started.elapsed().as_millis() as u64,
     };

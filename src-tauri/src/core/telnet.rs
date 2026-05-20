@@ -125,7 +125,6 @@ pub async fn create_telnet_session(
     port: u16,
     connection_id: Option<String>,
     name: String,
-    ai_execution_profile: AiExecutionProfile,
     backspace_mode: String,
 ) -> AppResult<String> {
     log_event(StructuredLog {
@@ -152,7 +151,7 @@ pub async fn create_telnet_session(
         name,
         session_type: SessionType::Telnet,
         connected: true,
-        ai_execution_profile,
+        ai_execution_profile: AiExecutionProfile::SendOnly,
         injection_active: false,
     };
 
