@@ -206,6 +206,49 @@ jobs:
           includeUpdaterJson: false
           args: ${{ matrix.args }}
 
+      - name: Package Windows portable zip
+        if: startsWith(github.ref, 'refs/tags/v') && matrix.platform == 'windows-latest'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          $target = "${{ matrix.target }}"
+          $arch = if ($target -eq "aarch64-pc-windows-msvc") { "arm64" } else { "x64" }
+          $releaseDir = if ($target -eq "aarch64-pc-windows-msvc") {
+            Join-Path "src-tauri/target" "$target/release"
+          } else {
+            "src-tauri/target/release"
+          }
+
+          $exe = Join-Path $releaseDir "nyaterm.exe"
+          if (-not (Test-Path $exe)) {
+            $exe = Get-ChildItem -Path $releaseDir -Filter "*.exe" |
+              Where-Object { $_.Name -notmatch 'build[-_]script' } |
+              Select-Object -First 1 -ExpandProperty FullName
+          }
+
+          if (-not $exe -or -not (Test-Path $exe)) {
+            throw "Release executable not found in $releaseDir"
+          }
+
+          $assetName = "NyaTerm_${version}_windows_${arch}_portable.zip"
+          $portableRoot = Join-Path $env:RUNNER_TEMP "NyaTerm-portable-package"
+          $portableDir = Join-Path $portableRoot "NyaTerm-portable"
+          $dataDir = Join-Path $portableDir "data"
+          $assetPath = Join-Path (Get-Location) $assetName
+
+          Remove-Item -LiteralPath $portableRoot -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
+          Copy-Item -LiteralPath $exe -Destination (Join-Path $portableDir "NyaTerm.exe")
+          New-Item -ItemType File -Path (Join-Path $portableDir "portable.flag") -Force | Out-Null
+          New-Item -ItemType File -Path (Join-Path $dataDir ".keep") -Force | Out-Null
+
+          Compress-Archive -Path $portableDir -DestinationPath $assetPath -Force
+          gh release upload "$env:GITHUB_REF_NAME" "$assetPath" --repo "$env:GITHUB_REPOSITORY" --clobber
+
   rename-assets:
     name: Rename release assets
     needs: build
