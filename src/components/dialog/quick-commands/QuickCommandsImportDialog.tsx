@@ -1,7 +1,8 @@
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { MdDataObject, MdTerminal } from "react-icons/md";
+import { MdDataObject, MdOpenInNew, MdTerminal } from "react-icons/md";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -45,13 +46,21 @@ const IMPORT_SOURCES: ImportSource[] = [
   },
 ];
 
+const QUICK_COMMAND_DOC_URLS = {
+  zh: "https://nyaterm.app/docs/guide/quick-commands#导入快捷命令",
+  en: "https://nyaterm.app/docs/guide/quick-commands#import-quick-commands",
+};
+
 export default function QuickCommandsImportDialog({
   open,
   onClose,
   onImported,
 }: QuickCommandsImportDialogProps) {
-  const { t } = useTranslation();
+  const { i18n, t } = useTranslation();
   const [importingSource, setImportingSource] = useState<QuickCommandImportSource | null>(null);
+  const docsUrl = i18n.language.toLowerCase().startsWith("zh")
+    ? QUICK_COMMAND_DOC_URLS.zh
+    : QUICK_COMMAND_DOC_URLS.en;
 
   const handleSelect = async (source: ImportSource) => {
     if (importingSource) return;
@@ -131,11 +140,22 @@ export default function QuickCommandsImportDialog({
           })}
         </div>
         <div
-          className="flex items-center gap-1.5 pt-1 text-[0.6875rem]"
+          className="flex items-center justify-between gap-3 pt-1 text-[0.6875rem]"
           style={{ color: "var(--df-text-dimmed)" }}
         >
-          <MdTerminal className="text-[0.85rem]" />
-          <span>{t("quickCommands.importMergeHint")}</span>
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            <MdTerminal className="shrink-0 text-[0.85rem]" />
+            <span className="leading-tight">{t("quickCommands.importMergeHint")}</span>
+          </div>
+          <button
+            type="button"
+            className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-1 text-[0.6875rem] transition-colors hover:bg-[var(--df-bg-hover)]"
+            style={{ color: "var(--df-primary)" }}
+            onClick={() => void openUrl(encodeURI(docsUrl))}
+          >
+            {t("quickCommands.importDocs")}
+            <MdOpenInNew className="text-[0.75rem]" />
+          </button>
         </div>
       </DialogContent>
     </Dialog>

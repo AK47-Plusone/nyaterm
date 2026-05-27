@@ -653,6 +653,7 @@
     "executionMode": "执行模式",
     "fillVariables": "填写命令参数",
     "import": "导入快捷命令",
+    "importDocs": "查看文档",
     "importFailed": "导入失败：{{error}}",
     "importMergeHint": "导入会按 ID 合并覆盖，不会清空现有快捷命令。",
     "importNyaTermJson": "NyaTerm JSON",

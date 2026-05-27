@@ -653,6 +653,7 @@
     "executionMode": "Execution Mode",
     "fillVariables": "Fill Command Variables",
     "import": "Import Quick Commands",
+    "importDocs": "View docs",
     "importFailed": "Import failed: {{error}}",
     "importMergeHint": "Import merges by ID and keeps existing quick commands.",
     "importNyaTermJson": "NyaTerm JSON",
