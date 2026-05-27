@@ -1422,7 +1422,7 @@ function App() {
   const handleQuickCmdResize = useCallback(
     (delta: number) => {
       updateUi((prev) => ({
-        quick_cmd_height: Math.max(36, Math.min(300, (prev.quick_cmd_height || 36) - delta)),
+        quick_cmd_height: Math.max(36, Math.min(300, (prev.quick_cmd_height || 180) - delta)),
       }));
     },
     [updateUi],
@@ -1431,7 +1431,7 @@ function App() {
   const handleSerialSendResize = useCallback(
     (delta: number) => {
       updateUi((prev) => ({
-        serial_send_height: Math.max(60, Math.min(300, (prev.serial_send_height || 120) - delta)),
+        serial_send_height: Math.max(60, Math.min(300, (prev.serial_send_height || 180) - delta)),
       }));
     },
     [updateUi],
@@ -1611,8 +1611,8 @@ function App() {
         tabsCount={tabs.length}
         bottomPanel={{
           activePanel: activeBottomPanel,
-          quickCmdHeight: uiConfig.quick_cmd_height,
-          serialSendHeight: uiConfig.serial_send_height || 120,
+          quickCmdHeight: uiConfig.quick_cmd_height || 180,
+          serialSendHeight: uiConfig.serial_send_height || 180,
           activeSerialSessionId,
           activeShellSessionIds,
           onQuickCmdResize: handleQuickCmdResize,
