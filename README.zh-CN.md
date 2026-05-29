@@ -300,6 +300,31 @@ pnpm tauri dev
 - [xterm.js](https://xtermjs.org/) - 强大的前端终端模拟器，提供了丰富的终端功能和扩展性
 - [russh](https://github.com/warp-tech/russh) - SSH 客户端和服务端 Rust 库
 
+---
+
+<a name="contributors"></a>
+# 贡献者
+
+感谢所有为 NyaTerm 做出贡献的开发者、设计师、测试人员和社区成员！
+
+<a href="https://github.com/nyakang/nyaterm/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=nyakang/nyaterm" />
+</a>
+
+---
+
+## 星标历史
+
+<a href="https://www.star-history.com/?repos=nyakang%2Fnyaterm&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=nyakang/nyaterm&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=nyakang/nyaterm&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=nyakang/nyaterm&type=date&legend=top-left" />
+ </picture>
+</a>
+
+---
+
 <a name="许可证"></a>
 # 许可证
 
