@@ -58,7 +58,9 @@ export function SettingSection({
   contentClassName,
 }: SettingSectionProps) {
   return (
-    <section className={cn("rounded-xl border border-border/70 bg-card/60 shadow-xs", className)}>
+    <section
+      className={cn("min-w-0 rounded-xl border border-border/70 bg-card/60 shadow-xs", className)}
+    >
       {(title || desc || action) && (
         <div className="flex flex-col gap-3 border-b border-border/60 px-4 py-4 sm:px-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -72,7 +74,9 @@ export function SettingSection({
           </div>
         </div>
       )}
-      <div className={cn("space-y-4 px-4 py-4 sm:px-5 sm:py-5", contentClassName)}>{children}</div>
+      <div className={cn("min-w-0 space-y-4 px-4 py-4 sm:px-5 sm:py-5", contentClassName)}>
+        {children}
+      </div>
     </section>
   );
 }
@@ -84,7 +88,9 @@ export function SettingFieldGrid({
   children: React.ReactNode;
   className?: string;
 }) {
-  return <div className={cn("grid gap-4 lg:grid-cols-2 lg:gap-x-6", className)}>{children}</div>;
+  return (
+    <div className={cn("grid min-w-0 gap-4 lg:grid-cols-2 lg:gap-x-6", className)}>{children}</div>
+  );
 }
 
 export function SettingRow({

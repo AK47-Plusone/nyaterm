@@ -327,7 +327,7 @@ export function SyncBackupTab({ onNavigateSecurity }: SyncBackupTabProps) {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-5">
       <SettingSection
         title={t("settings.syncProviderConfig")}
         desc={t("settings.syncProviderConfigDesc")}
@@ -646,13 +646,15 @@ export function SyncBackupTab({ onNavigateSecurity }: SyncBackupTabProps) {
               <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 {item.label}
               </div>
-              <div className="mt-2 text-sm font-medium">{item.value}</div>
+              <div className="mt-2 min-w-0 break-words text-sm font-medium [overflow-wrap:anywhere]">
+                {item.value}
+              </div>
             </div>
           ))}
         </div>
 
         {status.message ? (
-          <div className="rounded-lg border border-border/70 bg-card/60 px-4 py-3 text-sm text-muted-foreground">
+          <div className="min-w-0 rounded-lg border border-border/70 bg-card/60 px-4 py-3 text-sm text-muted-foreground break-words [overflow-wrap:anywhere]">
             {status.message}
           </div>
         ) : null}
@@ -726,7 +728,9 @@ export function SyncBackupTab({ onNavigateSecurity }: SyncBackupTabProps) {
           <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-4">
             <div className="text-sm font-semibold">{t("settings.syncConflictTitle")}</div>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              {status.conflict.message}
+              <span className="break-words [overflow-wrap:anywhere]">
+                {status.conflict.message}
+              </span>
             </p>
             <div className="mt-3 grid gap-2 md:grid-cols-2">
               <div className="rounded-md border border-border/70 bg-background/70 px-3 py-3">
@@ -790,7 +794,7 @@ export function SyncBackupTab({ onNavigateSecurity }: SyncBackupTabProps) {
         ) : null}
 
         {remoteBackupsError ? (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <div className="min-w-0 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive break-words [overflow-wrap:anywhere]">
             {remoteBackupsError}
           </div>
         ) : null}
