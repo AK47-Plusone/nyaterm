@@ -304,6 +304,8 @@ export default function XTerminal({
     skippedOutputCharsRef.current = 0;
     outputWriteInFlightRef.current = false;
     outputWriteQueueRef.current = Promise.resolve();
+    disconnectedRef.current = false;
+    reconnectingRef.current = false;
     performanceModeRef.current = "normal";
     resetCredentialAutofill();
     setPerformanceMode("normal");
