@@ -305,6 +305,19 @@ fn build_ready_marker_printf(ready_marker: &str) -> String {
     format!("printf '{}' 2>/dev/null\n", ready_osc)
 }
 
+fn should_emit_visible_output(suppress_visible: &mut bool, ready: bool) -> bool {
+    if !*suppress_visible {
+        return true;
+    }
+
+    if !ready {
+        return false;
+    }
+
+    *suppress_visible = false;
+    true
+}
+
 fn write_to_pty(writer: &mut dyn Write, data: &[u8]) -> std::io::Result<()> {
     writer.write_all(data)?;
     writer.flush()
@@ -600,10 +613,7 @@ fn pty_session_thread(
                         );
                     }
 
-                    if suppress_visible {
-                        if result.ready {
-                            suppress_visible = false;
-                        }
+                    if !should_emit_visible_output(&mut suppress_visible, result.ready) {
                         continue;
                     }
 
@@ -774,7 +784,10 @@ fn pty_session_thread(
 
 #[cfg(test)]
 mod tests {
-    use super::{build_local_startup_script_for_platform, parse_shell_args, resolve_shell_command};
+    use super::{
+        build_local_startup_script_for_platform, parse_shell_args, resolve_shell_command,
+        should_emit_visible_output,
+    };
 
     fn ready_marker() -> String {
         crate::core::ssh::osc::build_ready_marker("session-1")
@@ -810,6 +823,31 @@ mod tests {
         let args = parse_shell_args(r#"-Command "echo hi" "C:\Program Files\Tool""#).expect("args");
 
         assert_eq!(args, vec!["-Command", "echo hi", r"C:\Program Files\Tool"]);
+    }
+
+    #[test]
+    fn startup_suppression_hides_chunks_until_ready_marker() {
+        let mut suppress_visible = true;
+
+        assert!(!should_emit_visible_output(&mut suppress_visible, false));
+        assert!(suppress_visible);
+    }
+
+    #[test]
+    fn startup_suppression_emits_visible_text_from_ready_chunk() {
+        let mut suppress_visible = true;
+
+        assert!(should_emit_visible_output(&mut suppress_visible, true));
+        assert!(!suppress_visible);
+    }
+
+    #[test]
+    fn startup_suppression_emits_subsequent_chunks_after_ready() {
+        let mut suppress_visible = true;
+
+        assert!(should_emit_visible_output(&mut suppress_visible, true));
+        assert!(should_emit_visible_output(&mut suppress_visible, false));
+        assert!(!suppress_visible);
     }
 
     #[test]
