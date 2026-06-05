@@ -1,7 +1,9 @@
 import { listen } from "@tauri-apps/api/event";
+import { MoreHorizontalIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BiImport } from "react-icons/bi";
+import { BsFillSendPlusFill } from "react-icons/bs";
 import {
   MdAdd,
   MdAutoAwesome,
@@ -9,18 +11,20 @@ import {
   MdClose,
   MdDelete,
   MdEdit,
-  MdFilterList,
   MdKeyboardReturn,
   MdPushPin,
   MdSearch,
   MdSend,
   MdSort,
   MdTerminal,
+  MdVisibility,
 } from "react-icons/md";
 import DeleteQuickCommandCategoryDialog from "@/components/dialog/quick-commands/DeleteQuickCommandCategoryDialog";
+import DeleteQuickCommandDialog from "@/components/dialog/quick-commands/DeleteQuickCommandDialog";
 import QuickCommandsImportDialog from "@/components/dialog/quick-commands/QuickCommandsImportDialog";
 import RenameQuickCommandCategoryDialog from "@/components/dialog/quick-commands/RenameQuickCommandCategoryDialog";
 import PanelHeader from "@/components/layout/PanelHeader";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -31,19 +35,14 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { openAIAssistant } from "@/lib/aiEvents";
 import { invoke } from "@/lib/invoke";
@@ -91,16 +90,12 @@ function QuickCommands({ onSend, onSendToAll }: QuickCommandsProps) {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [categoryToRename, setCategoryToRename] = useState<QuickCommandCategory | null>(null);
   const [categoryToDelete, setCategoryToDelete] = useState<QuickCommandCategory | null>(null);
+  const [commandToDelete, setCommandToDelete] = useState<QuickCommand | null>(null);
 
   // Variable Prompt State
   const [promptCmd, setPromptCmd] = useState<QuickCommand | null>(null);
   const [promptVars, setPromptVars] = useState<VariableDef[]>([]);
   const [promptSendToAll, setPromptSendToAll] = useState(false);
-
-  const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
-  const [openTooltipCommandId, setOpenTooltipCommandId] = useState<string | null>(null);
-  const [suppressCommandTooltips, setSuppressCommandTooltips] = useState(false);
-  const suppressTooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadQuickCommands = useCallback(async () => {
     const cfg = await invoke<QuickCommandsConfig>("get_quick_commands");
@@ -138,6 +133,12 @@ function QuickCommands({ onSend, onSendToAll }: QuickCommandsProps) {
   const handleDelete = useCallback((id: string) => {
     setCommands((prev) => prev.filter((c) => c.id !== id));
   }, []);
+
+  const handleConfirmDeleteCommand = useCallback(() => {
+    if (!commandToDelete) return;
+    handleDelete(commandToDelete.id);
+    setCommandToDelete(null);
+  }, [commandToDelete, handleDelete]);
 
   const handleConfirmDeleteCategory = useCallback(() => {
     if (!categoryToDelete) return;
@@ -197,53 +198,6 @@ function QuickCommands({ onSend, onSendToAll }: QuickCommandsProps) {
     return () => {
       unsub.then((fn) => fn());
     };
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (suppressTooltipTimerRef.current) {
-        clearTimeout(suppressTooltipTimerRef.current);
-      }
-    };
-  }, []);
-
-  const clearCommandTooltipSuppression = useCallback(() => {
-    if (suppressTooltipTimerRef.current) {
-      clearTimeout(suppressTooltipTimerRef.current);
-      suppressTooltipTimerRef.current = null;
-    }
-    setSuppressCommandTooltips(false);
-  }, []);
-
-  const handleTooltipOpenChange = useCallback(
-    (commandId: string, open: boolean) => {
-      if (suppressCommandTooltips || isContextMenuOpen) {
-        if (!openTooltipCommandId) return;
-        setOpenTooltipCommandId(null);
-        return;
-      }
-
-      setOpenTooltipCommandId(open ? commandId : null);
-    },
-    [isContextMenuOpen, openTooltipCommandId, suppressCommandTooltips],
-  );
-
-  const handleContextMenuOpenChange = useCallback((open: boolean) => {
-    setIsContextMenuOpen(open);
-    setOpenTooltipCommandId(null);
-
-    if (suppressTooltipTimerRef.current) {
-      clearTimeout(suppressTooltipTimerRef.current);
-      suppressTooltipTimerRef.current = null;
-    }
-
-    if (!open) {
-      setSuppressCommandTooltips(true);
-      suppressTooltipTimerRef.current = setTimeout(() => {
-        setSuppressCommandTooltips(false);
-        suppressTooltipTimerRef.current = null;
-      }, 700);
-    }
   }, []);
 
   const handleCommandClick = useCallback(
@@ -330,6 +284,40 @@ function QuickCommands({ onSend, onSendToAll }: QuickCommandsProps) {
     return Array.from(catsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [commands, savedCategories]);
 
+  const categoryItems = useMemo(() => {
+    const commandCounts = new Map<string, number>();
+    let uncategorizedCount = 0;
+
+    commands.forEach((cmd) => {
+      if (!cmd.category_id) {
+        uncategorizedCount += 1;
+        return;
+      }
+      commandCounts.set(cmd.category_id, (commandCounts.get(cmd.category_id) ?? 0) + 1);
+    });
+
+    return [
+      {
+        id: "all",
+        label: t("quickCommands.allCategories"),
+        count: commands.length,
+        isManageable: false,
+      },
+      ...allCategories.map((category) => ({
+        id: category.id,
+        label: category.name,
+        count: commandCounts.get(category.id) ?? 0,
+        isManageable: savedCategories.some((savedCategory) => savedCategory.id === category.id),
+      })),
+      {
+        id: "uncategorized",
+        label: t("quickCommands.uncategorized"),
+        count: uncategorizedCount,
+        isManageable: false,
+      },
+    ];
+  }, [allCategories, commands, savedCategories, t]);
+
   const filteredCommands = useMemo(() => {
     let filtered = commands;
 
@@ -376,9 +364,6 @@ function QuickCommands({ onSend, onSendToAll }: QuickCommandsProps) {
     hasActiveFilters && commands.length > 0
       ? `${filteredCommands.length}/${commands.length}`
       : `${commands.length}`;
-  const selectedCategoryForAction = allCategories.find(
-    (category) => category.id === selectedCategory,
-  );
   const categoryToDeleteCommandCount = categoryToDelete
     ? commands.filter((cmd) => cmd.category_id === categoryToDelete.id).length
     : 0;
@@ -402,84 +387,27 @@ function QuickCommands({ onSend, onSendToAll }: QuickCommandsProps) {
           }
           actions={
             <>
-              <div className="relative w-[9rem] shrink-0 transition-colors focus-within:text-[var(--df-primary)] text-[var(--df-text-dimmed)]">
-                <MdSearch className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[0.875rem]" />
-                <Input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder={t("quickCommands.search")}
-                  className={`${headerControlClassName} pl-7 pr-7 placeholder:text-[var(--df-text-dimmed)] focus-visible:ring-1 focus-visible:ring-[var(--df-primary)] focus-visible:bg-transparent`}
-                />
-                {search && (
-                  <button
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 transition-colors hover:text-[var(--df-text)] text-[var(--df-text-dimmed)]"
-                    onClick={() => setSearch("")}
-                  >
-                    <MdClose className="text-[0.75rem]" />
-                  </button>
-                )}
+              <div className="flex min-w-0 items-center gap-1">
+                <div className="relative w-[9rem] shrink-0 transition-colors focus-within:text-[var(--df-primary)] text-[var(--df-text-dimmed)]">
+                  <MdSearch className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[0.875rem]" />
+                  <Input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder={t("quickCommands.search")}
+                    className={`${headerControlClassName} pl-7 pr-7 placeholder:text-[var(--df-text-dimmed)] focus-visible:ring-1 focus-visible:ring-[var(--df-primary)] focus-visible:bg-transparent`}
+                  />
+                  {search && (
+                    <button
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 transition-colors hover:text-[var(--df-text)] text-[var(--df-text-dimmed)]"
+                      onClick={() => setSearch("")}
+                    >
+                      <MdClose className="text-[0.75rem]" />
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <div className="relative w-[8.5rem] shrink-0 transition-colors focus-within:text-[var(--df-primary)] text-[var(--df-text-dimmed)]">
-                <MdFilterList className="pointer-events-none absolute left-2 top-1/2 z-10 -translate-y-1/2 text-[0.875rem]" />
-                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                  <SelectTrigger
-                    size="sm"
-                    className={`${headerControlClassName} w-full pl-7 pr-2 hover:bg-[color-mix(in_srgb,var(--df-bg-hover)_70%,var(--df-bg-panel))] focus:ring-1 focus:ring-[var(--df-primary)] [&_span]:leading-none`}
-                  >
-                    <SelectValue placeholder={t("quickCommands.allCategories")} />
-                  </SelectTrigger>
-                  <SelectContent align="start">
-                    <SelectItem value="all" className="text-xs">
-                      {t("quickCommands.allCategories")}
-                    </SelectItem>
-                    {allCategories.map((category) => (
-                      <SelectItem key={category.id} value={category.id} className="text-xs">
-                        {category.name}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value="uncategorized" className="text-xs">
-                      {t("quickCommands.uncategorized")}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {selectedCategoryForAction && (
-                <>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="h-6 w-6 shrink-0 rounded-md p-0 transition-colors hover:bg-[var(--df-bg-hover)]"
-                        style={{ color: "var(--df-text-muted)" }}
-                        aria-label={t("quickCommands.renameCategory")}
-                        onClick={() => setCategoryToRename(selectedCategoryForAction)}
-                      >
-                        <MdEdit className="text-[1.05rem]" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">{t("quickCommands.renameCategory")}</TooltipContent>
-                  </Tooltip>
-
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="h-6 w-6 shrink-0 rounded-md p-0 transition-colors hover:bg-[var(--df-bg-hover)]"
-                        style={{ color: "var(--df-text-muted)" }}
-                        aria-label={t("quickCommands.deleteCategory")}
-                        onClick={() => setCategoryToDelete(selectedCategoryForAction)}
-                      >
-                        <MdDelete className="text-[1.05rem]" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">{t("quickCommands.deleteCategory")}</TooltipContent>
-                  </Tooltip>
-                </>
-              )}
+              <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-border/50" />
 
               <DropdownMenu>
                 <Tooltip>
@@ -519,37 +447,43 @@ function QuickCommands({ onSend, onSendToAll }: QuickCommandsProps) {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="h-6 w-6 shrink-0 rounded-md p-0 transition-colors hover:bg-[var(--df-bg-hover)]"
-                    style={{ color: "var(--df-text-muted)" }}
-                    aria-label={t("quickCommands.addCommand")}
-                    onClick={() => openQuickCommand()}
-                  >
-                    <MdAdd className="text-[1.05rem]" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top">{t("quickCommands.addCommand")}</TooltipContent>
-              </Tooltip>
+              <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-border/50" />
 
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="h-6 w-6 shrink-0 rounded-md p-0 transition-colors hover:bg-[var(--df-bg-hover)]"
-                    style={{ color: "var(--df-text-muted)" }}
-                    aria-label={t("quickCommands.import")}
-                    onClick={() => setImportDialogOpen(true)}
-                  >
-                    <BiImport className="text-[1.05rem]" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top">{t("quickCommands.import")}</TooltipContent>
-              </Tooltip>
+              <div className="flex items-center gap-1">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="h-6 w-6 shrink-0 rounded-md p-0 transition-colors hover:bg-[var(--df-bg-hover)]"
+                      style={{ color: "var(--df-text-muted)" }}
+                      aria-label={t("quickCommands.addCommand")}
+                      onClick={() => openQuickCommand()}
+                    >
+                      <MdAdd className="text-[1.05rem]" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">{t("quickCommands.addCommand")}</TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="h-6 w-6 shrink-0 rounded-md p-0 transition-colors hover:bg-[var(--df-bg-hover)]"
+                      style={{ color: "var(--df-text-muted)" }}
+                      aria-label={t("quickCommands.import")}
+                      onClick={() => setImportDialogOpen(true)}
+                    >
+                      <BiImport className="text-[1.05rem]" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">{t("quickCommands.import")}</TooltipContent>
+                </Tooltip>
+              </div>
+
+              <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-border/50" />
 
               <Popover open={aiPopoverOpen} onOpenChange={setAiPopoverOpen}>
                 <Tooltip>
@@ -596,163 +530,317 @@ function QuickCommands({ onSend, onSendToAll }: QuickCommandsProps) {
           }
         />
 
-        {/* Commands List */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden terminal-scroll p-1.5">
-          <div className="flex flex-wrap gap-1.5 content-start">
-            {filteredCommands.length === 0 ? (
-              <div className="flex flex-col items-center justify-center w-full mt-10 p-4 border border-dashed rounded-lg text-muted-foreground opacity-70">
-                <MdTerminal className="text-2xl mb-2" />
-                <span className="text-xs mb-3">{t("quickCommands.noCommandsFound")}</span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs bg-muted/20 hover:bg-muted"
-                  onClick={() => openQuickCommand()}
-                >
-                  <MdAdd className="mr-1 text-sm" />
-                  {t("quickCommands.addCommand")}
-                </Button>
-              </div>
-            ) : (
-              filteredCommands.map((cmd) => {
-                const dotColor = COLOR_DOT[cmd.color_tag || "default"] || COLOR_DOT.default;
+        <div className="flex min-h-0 flex-1">
+          <aside className="w-[11rem] shrink-0 overflow-y-auto overflow-x-hidden border-r border-border/35 p-1.5 terminal-scroll">
+            <div className="flex flex-col gap-1">
+              {categoryItems.map((category) => {
+                const active = selectedCategory === category.id;
+                const savedCategory = category.isManageable
+                  ? savedCategories.find((item) => item.id === category.id)
+                  : undefined;
 
                 return (
-                  <ContextMenu key={cmd.id} onOpenChange={handleContextMenuOpenChange}>
-                    <Tooltip
-                      open={
-                        openTooltipCommandId === cmd.id &&
-                        !isContextMenuOpen &&
-                        !suppressCommandTooltips
-                      }
-                      onOpenChange={(open) => handleTooltipOpenChange(cmd.id, open)}
-                    >
-                      <ContextMenuTrigger asChild>
-                        <TooltipTrigger asChild>
-                          <button
-                            className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[0.6875rem] font-medium cursor-pointer transition-colors border bg-muted/20 hover:bg-muted/50 shrink-0 max-w-full text-foreground/80 hover:text-foreground"
-                            onClick={() => handleCommandClick(cmd)}
-                            onPointerLeave={clearCommandTooltipSuppression}
-                          >
-                            {cmd.icon_tag && QUICK_ICONS[cmd.icon_tag] ? (
-                              (() => {
-                                const iconDef = QUICK_ICONS[cmd.icon_tag!];
-                                return (
-                                  <iconDef.icon
-                                    className="text-[0.75rem] opacity-80"
-                                    style={{ color: iconDef.color }}
-                                  />
-                                );
-                              })()
-                            ) : (
-                              <span
-                                className={`inline-block w-2 h-2 rounded-full shrink-0 ${dotColor}`}
-                              />
-                            )}
-                            {cmd.pinned && <MdPushPin className="text-[0.625rem] opacity-60" />}
-                            <span className="whitespace-nowrap overflow-hidden text-ellipsis">
-                              {cmd.label}
-                            </span>
-                          </button>
-                        </TooltipTrigger>
-                      </ContextMenuTrigger>
-                      <TooltipContent
-                        side="top"
-                        align="start"
-                        showArrow={false}
-                        className="w-[320px] p-0 shadow-2xl border-border/60 bg-popover/95 backdrop-blur-md rounded-xl overflow-hidden"
+                  <ContextMenu key={category.id}>
+                    <ContextMenuTrigger asChild disabled={!savedCategory}>
+                      <button
+                        type="button"
+                        className="group flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-xs transition-colors hover:bg-[var(--df-bg-hover)]"
+                        style={{
+                          backgroundColor: active ? "var(--df-bg-hover)" : "transparent",
+                          color: active ? "var(--df-primary)" : "var(--df-text)",
+                        }}
+                        onClick={() => setSelectedCategory(category.id)}
                       >
-                        <div className="flex flex-col">
-                          <div className="flex flex-col gap-1.5 p-3 bg-muted/30 border-b border-border/30">
-                            <div className="flex items-center gap-2">
+                        <span
+                          className="h-1.5 w-1.5 shrink-0 rounded-full"
+                          style={{
+                            backgroundColor: active ? "var(--df-primary)" : "var(--df-text-dimmed)",
+                            opacity: active ? 1 : 0.6,
+                          }}
+                        />
+                        <span className="min-w-0 flex-1 truncate font-medium">
+                          {category.label}
+                        </span>
+                        <span
+                          className="shrink-0 rounded px-1.5 py-0.5 text-[0.625rem] leading-none"
+                          style={{
+                            backgroundColor: active
+                              ? "color-mix(in_srgb,var(--df-primary)_14%,transparent)"
+                              : "var(--df-bg-hover)",
+                            color: active ? "var(--df-primary)" : "var(--df-text-dimmed)",
+                          }}
+                        >
+                          {category.count}
+                        </span>
+                      </button>
+                    </ContextMenuTrigger>
+                    {savedCategory && (
+                      <ContextMenuContent className="min-w-[120px]">
+                        <ContextMenuItem
+                          className="text-xs gap-2"
+                          onClick={() => setCategoryToRename(savedCategory)}
+                        >
+                          <MdEdit className="text-[0.875rem]" />
+                          {t("quickCommands.edit")}
+                        </ContextMenuItem>
+                        <ContextMenuItem
+                          className="text-xs gap-2 text-destructive focus:text-destructive"
+                          onClick={() => setCategoryToDelete(savedCategory)}
+                        >
+                          <MdDelete className="text-[0.875rem]" />
+                          {t("quickCommands.delete")}
+                        </ContextMenuItem>
+                      </ContextMenuContent>
+                    )}
+                  </ContextMenu>
+                );
+              })}
+            </div>
+          </aside>
+
+          <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden terminal-scroll p-1.5">
+            <div className="flex min-w-0 flex-col gap-1.5">
+              {filteredCommands.length === 0 ? (
+                <div className="mx-auto mt-8 flex w-full max-w-md flex-col items-center justify-center rounded-lg border border-dashed p-4 text-muted-foreground opacity-70">
+                  <MdTerminal className="text-2xl mb-2" />
+                  <span className="text-xs mb-3">{t("quickCommands.noCommandsFound")}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs bg-muted/20 hover:bg-muted"
+                    onClick={() => openQuickCommand()}
+                  >
+                    <MdAdd className="mr-1 text-sm" />
+                    {t("quickCommands.addCommand")}
+                  </Button>
+                </div>
+              ) : (
+                filteredCommands.map((cmd) => {
+                  const dotColor = COLOR_DOT[cmd.color_tag || "default"] || COLOR_DOT.default;
+
+                  return (
+                    <ContextMenu key={cmd.id}>
+                      <ContextMenuTrigger asChild>
+                        <div
+                          className="group flex min-h-11 w-full min-w-0 items-center gap-2 rounded-md border border-border/35 bg-muted/15 px-2 py-1.5 text-xs transition-colors hover:bg-muted/45 hover:text-foreground"
+                          style={{ color: "var(--df-text)" }}
+                        >
+                          <button
+                            className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded px-1 text-left"
+                            onClick={() => handleCommandClick(cmd)}
+                          >
+                            <span className="flex h-4 w-4 shrink-0 items-center justify-center">
                               {cmd.icon_tag && QUICK_ICONS[cmd.icon_tag] ? (
                                 (() => {
                                   const iconDef = QUICK_ICONS[cmd.icon_tag!];
                                   return (
                                     <iconDef.icon
-                                      className="text-[0.875rem] opacity-80 shrink-0"
+                                      className="text-[0.9rem] opacity-85"
                                       style={{ color: iconDef.color }}
                                     />
                                   );
                                 })()
                               ) : (
-                                <span
-                                  className={`inline-block w-2.5 h-2.5 rounded-full shrink-0 ${dotColor}`}
-                                />
+                                <span className={`h-2.5 w-2.5 rounded-full ${dotColor}`} />
                               )}
-                              <span className="font-semibold text-sm text-foreground truncate">
-                                {cmd.label}
+                            </span>
+                            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                {cmd.pinned && (
+                                  <MdPushPin className="shrink-0 text-[0.7rem] opacity-60" />
+                                )}
+                                <span className="min-w-0 truncate font-medium">{cmd.label}</span>
                               </span>
-                              <div className="flex-1" />
-                              {cmd.category_id && (
-                                <span className="text-[0.625rem] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium border border-primary/20">
-                                  {allCategories.find((c) => c.id === cmd.category_id)?.name ||
-                                    cmd.category_id}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1.5 text-[0.6875rem] text-muted-foreground mt-0.5">
-                              {cmd.execution_mode === "append" ? (
-                                <MdKeyboardReturn className="text-[0.75rem]" />
-                              ) : (
-                                <MdBolt className="text-[0.75rem]" />
-                              )}
-                              {cmd.execution_mode === "append"
-                                ? t("quickCommands.appendOnly")
-                                : t("quickCommands.executeImmediately")}
-                            </div>
-                          </div>
-
-                          <div className="p-3 flex flex-col gap-3">
-                            {cmd.description && (
-                              <div className="text-xs text-muted-foreground/90 leading-relaxed">
-                                {cmd.description}
-                              </div>
-                            )}
-
-                            <div className="relative group">
-                              <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-md blur-sm" />
-                              <pre
-                                className="relative text-[0.6875rem] font-mono text-foreground/80 bg-background/50 border border-border/40 p-2.5 rounded-md whitespace-pre-wrap break-all max-h-[120px] overflow-y-auto terminal-scroll custom-scrollbar"
-                                title={cmd.command}
-                              >
+                              <span className="min-w-0 truncate font-mono text-[0.6875rem] leading-none text-muted-foreground">
                                 {cmd.command}
-                              </pre>
-                            </div>
-                          </div>
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
+                              </span>
+                            </span>
+                          </button>
+                          <span className="flex shrink-0 items-center gap-1 opacity-85 transition-opacity group-hover:opacity-100">
+                            <Badge
+                              variant="outline"
+                              className="max-w-[6.5rem] gap-1 border-border/40 bg-background/35 px-1.5 py-0 text-[0.625rem] leading-4 text-muted-foreground"
+                            >
+                              {cmd.execution_mode === "append" ? (
+                                <MdKeyboardReturn className="text-[0.7rem]" />
+                              ) : (
+                                <MdBolt className="text-[0.7rem]" />
+                              )}
+                              <span className="truncate">
+                                {cmd.execution_mode === "append"
+                                  ? t("quickCommands.appendOnly")
+                                  : t("quickCommands.executeImmediately")}
+                              </span>
+                            </Badge>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className="h-7 w-7 rounded p-0 text-muted-foreground hover:bg-[var(--df-bg-hover)] hover:text-foreground"
+                                  aria-label={t("quickCommands.send")}
+                                  onClick={() => handleCommandClick(cmd)}
+                                >
+                                  <MdSend className="text-[0.875rem]" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">{t("quickCommands.send")}</TooltipContent>
+                            </Tooltip>
+                            <Popover>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <PopoverTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      className="h-7 w-7 rounded p-0 text-muted-foreground hover:bg-[var(--df-bg-hover)] hover:text-foreground"
+                                      aria-label={t("quickCommands.view")}
+                                    >
+                                      <MdVisibility className="text-[0.875rem]" />
+                                    </Button>
+                                  </PopoverTrigger>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">
+                                  {t("quickCommands.view")}
+                                </TooltipContent>
+                              </Tooltip>
+                              <PopoverContent
+                                side="top"
+                                align="end"
+                                sideOffset={6}
+                                className="w-[320px] overflow-hidden rounded-xl border-border/60 bg-popover/95 p-0 shadow-2xl backdrop-blur-md"
+                              >
+                                <div className="flex flex-col">
+                                  <div className="flex flex-col gap-1.5 border-b border-border/30 bg-muted/30 p-3">
+                                    <div className="flex items-center gap-2">
+                                      <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                                        {cmd.icon_tag && QUICK_ICONS[cmd.icon_tag] ? (
+                                          (() => {
+                                            const iconDef = QUICK_ICONS[cmd.icon_tag!];
+                                            return (
+                                              <iconDef.icon
+                                                className="text-[0.875rem] opacity-80"
+                                                style={{ color: iconDef.color }}
+                                              />
+                                            );
+                                          })()
+                                        ) : (
+                                          <span
+                                            className={`h-2.5 w-2.5 rounded-full ${dotColor}`}
+                                          />
+                                        )}
+                                      </span>
+                                      <span className="truncate text-sm font-semibold text-foreground">
+                                        {cmd.label}
+                                      </span>
+                                      <div className="flex-1" />
+                                      {cmd.category_id && (
+                                        <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[0.625rem] font-medium text-primary">
+                                          {allCategories.find((c) => c.id === cmd.category_id)
+                                            ?.name || cmd.category_id}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <Badge
+                                      variant="outline"
+                                      className="w-fit gap-1 border-border/40 bg-background/35 px-1.5 py-0 text-[0.6875rem] leading-5 text-muted-foreground"
+                                    >
+                                      {cmd.execution_mode === "append" ? (
+                                        <MdKeyboardReturn className="text-[0.75rem]" />
+                                      ) : (
+                                        <MdBolt className="text-[0.75rem]" />
+                                      )}
+                                      {cmd.execution_mode === "append"
+                                        ? t("quickCommands.appendOnly")
+                                        : t("quickCommands.executeImmediately")}
+                                    </Badge>
+                                  </div>
 
-                    <ContextMenuContent className="min-w-[120px]">
-                      {onSendToAll && (
+                                  <div className="flex flex-col gap-3 p-3">
+                                    {cmd.description && (
+                                      <div className="text-xs leading-relaxed text-muted-foreground/90">
+                                        {cmd.description}
+                                      </div>
+                                    )}
+
+                                    <pre
+                                      className="custom-scrollbar terminal-scroll max-h-[120px] overflow-y-auto whitespace-pre-wrap break-all rounded-md border border-border/40 bg-background/50 p-2.5 font-mono text-[0.6875rem] text-foreground/80"
+                                      title={cmd.command}
+                                    >
+                                      {cmd.command}
+                                    </pre>
+                                  </div>
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className="h-7 w-7 rounded p-0 text-muted-foreground hover:bg-[var(--df-bg-hover)] hover:text-foreground"
+                                  aria-label="More"
+                                >
+                                  <MoreHorizontalIcon className="size-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="min-w-[140px]">
+                                <DropdownMenuItem
+                                  onClick={() => openQuickCommand(JSON.stringify(cmd))}
+                                >
+                                  <MdEdit className="text-[0.875rem]" />
+                                  {t("quickCommands.edit")}
+                                </DropdownMenuItem>
+                                {onSendToAll && (
+                                  <DropdownMenuItem onClick={() => handleSendToAll(cmd)}>
+                                    <BsFillSendPlusFill className="text-[0.875rem]" />
+                                    {t("quickCommands.sendToAll")}
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onClick={() => setCommandToDelete(cmd)}
+                                >
+                                  <MdDelete className="text-[0.875rem]" />
+                                  {t("quickCommands.delete")}
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </span>
+                        </div>
+                      </ContextMenuTrigger>
+
+                      <ContextMenuContent className="min-w-[120px]">
                         <ContextMenuItem
                           className="text-xs gap-2"
-                          onClick={() => handleSendToAll(cmd)}
+                          onClick={() => openQuickCommand(JSON.stringify(cmd))}
                         >
-                          <MdSend className="text-[0.875rem]" />
-                          {t("quickCommands.sendToAll")}
+                          <MdEdit className="text-[0.875rem]" />
+                          {t("quickCommands.edit")}
                         </ContextMenuItem>
-                      )}
-                      <ContextMenuItem
-                        className="text-xs gap-2"
-                        onClick={() => openQuickCommand(JSON.stringify(cmd))}
-                      >
-                        <MdEdit className="text-[0.875rem]" />
-                        {t("quickCommands.edit")}
-                      </ContextMenuItem>
-                      <ContextMenuItem
-                        className="text-xs gap-2 text-destructive focus:text-destructive"
-                        onClick={() => handleDelete(cmd.id)}
-                      >
-                        <MdDelete className="text-[0.875rem]" />
-                        {t("quickCommands.delete")}
-                      </ContextMenuItem>
-                    </ContextMenuContent>
-                  </ContextMenu>
-                );
-              })
-            )}
+                        {onSendToAll && (
+                          <ContextMenuItem
+                            className="text-xs gap-2"
+                            onClick={() => handleSendToAll(cmd)}
+                          >
+                            <BsFillSendPlusFill className="text-[0.875rem]" />
+                            {t("quickCommands.sendToAll")}
+                          </ContextMenuItem>
+                        )}
+                        <ContextMenuItem
+                          className="text-xs gap-2 text-destructive focus:text-destructive"
+                          onClick={() => setCommandToDelete(cmd)}
+                        >
+                          <MdDelete className="text-[0.875rem]" />
+                          {t("quickCommands.delete")}
+                        </ContextMenuItem>
+                      </ContextMenuContent>
+                    </ContextMenu>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
         {promptCmd && (
@@ -771,6 +859,11 @@ function QuickCommands({ onSend, onSendToAll }: QuickCommandsProps) {
           open={importDialogOpen}
           onClose={() => setImportDialogOpen(false)}
           onImported={handleImported}
+        />
+        <DeleteQuickCommandDialog
+          command={commandToDelete}
+          onCancel={() => setCommandToDelete(null)}
+          onConfirm={handleConfirmDeleteCommand}
         />
         <RenameQuickCommandCategoryDialog
           category={categoryToRename}
