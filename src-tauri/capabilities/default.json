@@ -4,9 +4,13 @@
   "description": "Capability for the main window and child windows",
   "windows": [
     "main",
+    "main-*",
     "settings",
+    "settings-*",
     "new-session",
+    "new-session-*",
     "quick-command",
+    "quick-command-*",
     "auto-upload-*"
   ],
   "permissions": [
