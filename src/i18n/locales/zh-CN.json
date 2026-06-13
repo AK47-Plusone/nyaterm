@@ -1210,6 +1210,8 @@
     "openLogsFailed": "打开日志目录失败",
     "openSecuritySettings": "打开安全设置",
     "optionalField": "可选",
+    "panelMultiOpen": "侧边面板多开",
+    "panelMultiOpenDesc": "开启后，点击两侧活动栏图标可同时打开多个面板。",
     "passphrase": "密码短语（可选）",
     "payloadHashLabel": "快照哈希",
     "policyAccept": "接受 (自动添加)",

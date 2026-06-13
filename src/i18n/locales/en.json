@@ -1210,6 +1210,8 @@
     "openLogsFailed": "Failed to open log folder",
     "openSecuritySettings": "Open Security",
     "optionalField": "Optional",
+    "panelMultiOpen": "Multi-open Side Panels",
+    "panelMultiOpenDesc": "When enabled, clicking activity bar icons on either side can open multiple panels at once.",
     "passphrase": "Passphrase (optional)",
     "payloadHashLabel": "Payload Hash",
     "policyAccept": "Accept (Auto-add)",
